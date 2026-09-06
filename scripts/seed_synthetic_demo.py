@@ -202,7 +202,15 @@ def add_task(db, team, teamlead, assignee, title, status, deadline_days_from_now
     )
     db.add(task)
     db.flush()
-    db.add(TaskStatusHistory(task_id=task.id, old_status=None, new_status=status, changed_by_member_id=teamlead.id))
+    db.add(TaskStatusHistory(task_id=task.id, old_status=None, new_status=TaskStatus.todo, changed_by_member_id=teamlead.id))
+    if status == TaskStatus.in_progress:
+        db.add(TaskStatusHistory(task_id=task.id, old_status=TaskStatus.todo, new_status=status,
+                                 changed_at=task.status_changed_at, changed_by_member_id=None))
+    if status == TaskStatus.done:
+        # Закрытие руками — единственный путь к «готово», и на демо это должно
+        # быть видно в истории задачи: с именем человека, а не «автоматически».
+        db.add(TaskStatusHistory(task_id=task.id, old_status=TaskStatus.in_progress, new_status=status,
+                                 changed_at=task.completed_at, changed_by_member_id=task.assignee_member_id))
     return task
 
 
@@ -236,7 +244,8 @@ def seed_task_commits(db, team: Team, tasks: list[Task], members: dict[str, Memb
             if unreferenced:
                 message = f"Work on {short_title}"
             elif is_last and task.status == TaskStatus.done:
-                message = f"Wrap up {short_title}, closes #{task.number}"
+                # Без «closes»: коммит задачу не закрывает, её закрывает человек.
+                message = f"Wrap up {short_title} #{task.number}"
             else:
                 message = rng.choice(TASK_COMMIT_MESSAGES).format(title=short_title, id=task.number)
 

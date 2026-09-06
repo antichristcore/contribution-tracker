@@ -64,7 +64,7 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
       showToast(
         res.error
           ? `GitHub: ${res.error}`
-          : `Новых коммитов: ${res.new_commits ?? 0} · привязано к задачам: ${res.linked_commits ?? 0}`
+          : `Новых коммитов: ${res.new_commits ?? 0}, из них привязалось к задачам: ${res.linked_commits ?? 0}`
       );
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Не удалось обновить");
@@ -73,11 +73,30 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
     }
   }
 
+  /** Право закрыть — у тимлида и исполнителя, та же проверка, что на бэке. */
+  function canComplete(task: Task): boolean {
+    return isTeamlead || task.assignee_member_id === currentMember.id;
+  }
+
+  async function completeTask(task: Task) {
+    // Спрашиваем, потому что обратно участник задачу открыть не сможет:
+    // статус ходит только вперёд.
+    if (!confirm(`Закрыть задачу #${task.number}?`)) return;
+    try {
+      await api.patch(`/tasks/${task.id}`, { status: "done" });
+      haptic("success");
+      await load();
+      showToast(`Задача #${task.number} закрыта`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Не удалось закрыть задачу");
+    }
+  }
+
   async function createTask(payload: TaskPayload) {
     const task = await api.post<{ number: number }>("/tasks", payload);
     haptic("success");
     await load();
-    showToast(`Задача #${task.number} создана — этот номер нужно упоминать в коммитах`);
+    showToast(`Задача #${task.number} создана. Пиши этот номер в сообщениях коммитов`);
   }
 
   if (error) return <div className="p-4 text-sm text-red-500">{error}</div>;
@@ -145,6 +164,7 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
             task={t}
             mine={t.assignee_member_id === currentMember.id}
             onOpen={() => onOpenTask(t.id)}
+            onComplete={canComplete(t) ? () => void completeTask(t) : undefined}
           />
         ))
       )}

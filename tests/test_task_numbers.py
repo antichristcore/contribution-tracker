@@ -41,10 +41,10 @@ def test_same_number_in_two_projects_are_different_tasks(db, team):
 
     assert mine.number == theirs.number == 1
 
-    result = link_commit_to_task(db, team.id, "работа по #1", NOW)
-    assert result is not None
-    assert result[0].id == mine.id
-    assert result[0].id != theirs.id
+    linked = link_commit_to_task(db, team.id, "работа по #1", NOW)
+    assert linked is not None
+    assert linked.id == mine.id
+    assert linked.id != theirs.id
 
 
 def test_commit_reference_resolves_by_number_not_id(db, team):
@@ -57,10 +57,9 @@ def test_commit_reference_resolves_by_number_not_id(db, team):
     assert mine.number == 1
     assert mine.id != 1
 
-    result = link_commit_to_task(db, team.id, "fixes #1", NOW)
-    assert result is not None
-    assert result[0].id == mine.id
-    assert result[1] is True
+    linked = link_commit_to_task(db, team.id, "работа по #1", NOW)
+    assert linked is not None
+    assert linked.id == mine.id
 
 
 def test_number_is_reused_after_deleting_the_last_task(db, team):
@@ -81,4 +80,4 @@ def test_number_is_reused_after_deleting_the_last_task(db, team):
 
 def test_unknown_number_does_not_link(db, team):
     make_task(db, team, assignee=make_member(db, team), status=TaskStatus.todo)
-    assert link_commit_to_task(db, team.id, "fixes #999", NOW) is None
+    assert link_commit_to_task(db, team.id, "работа по #999", NOW) is None

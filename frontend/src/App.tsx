@@ -1,6 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import Dashboard from "./views/Dashboard";
+import GithubGate from "./views/GithubGate";
 import MemberDetail from "./views/MemberDetail";
+import ScoreExplainer from "./views/ScoreExplainer";
 import TaskBoard from "./views/TaskBoard";
 import TaskDetail from "./views/TaskDetail";
 import TeamPicker from "./views/TeamPicker";
@@ -17,6 +19,7 @@ type Overlay =
   | { type: "task"; id: number }
   | { type: "member"; id: number }
   | { type: "beforeAfter" }
+  | { type: "scoreHelp" }
   | null;
 
 export default function App() {
@@ -24,6 +27,8 @@ export default function App() {
   const [member, setMember] = useState<Member | null>(null);
   const [initialTasks, setInitialTasks] = useState<Task[] | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [needsGithub, setNeedsGithub] = useState(false);
+  const [knownGithub, setKnownGithub] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("board");
   const [overlay, setOverlay] = useState<Overlay>(null);
 
@@ -48,10 +53,12 @@ export default function App() {
       const hinted = rememberedTeamId();
       const boot = await api.get<Bootstrap>(`/bootstrap${hinted !== null ? `?team_id=${hinted}` : ""}`);
       setMyTeams(boot.teams);
+      setKnownGithub(boot.known_github_username);
       if (boot.team_id !== null && boot.member) {
         setTeamId(boot.team_id);
         setInitialTasks(boot.tasks);
         setMember(boot.member);
+        setNeedsGithub(boot.needs_github_username);
       }
     } catch (e) {
       setAuthError(e instanceof Error ? e.message : "Не удалось авторизоваться");
@@ -79,6 +86,8 @@ export default function App() {
     setMyTeams(boot.teams);
     setInitialTasks(boot.tasks);
     setMember(boot.member);
+    setNeedsGithub(boot.needs_github_username);
+    setKnownGithub(boot.known_github_username);
   }
 
   function switchTeam() {
@@ -95,6 +104,7 @@ export default function App() {
     return (
       <TeamPicker
         teams={myTeams}
+        knownGithubUsername={knownGithub}
         onPick={(id) => void selectTeam(id)}
         onEntered={(id) => void selectTeam(id)}
       />
@@ -103,9 +113,25 @@ export default function App() {
 
   if (!member) return <Centered>Загрузка...</Centered>;
 
+  // Участник уже в проекте, но без привязки к GitHub: доска ему бесполезна —
+  // коммиты остаются ничьими, вклад не считается. Единственное место, где
+  // приложение чего-то требует до показа данных.
+  if (needsGithub) {
+    return (
+      <GithubGate
+        memberId={member.id}
+        knownUsername={knownGithub}
+        onDone={() => setNeedsGithub(false)}
+      />
+    );
+  }
+
   const isTeamlead = member.system_role === "teamlead";
   const secondTabActive =
-    tab === "team" || (overlay?.type === "member" && overlay.id === member.id) || overlay?.type === "beforeAfter";
+    tab === "team" ||
+    (overlay?.type === "member" && overlay.id === member.id) ||
+    overlay?.type === "beforeAfter" ||
+    overlay?.type === "scoreHelp";
 
   function openSecondTab() {
     if (isTeamlead) {
@@ -139,15 +165,19 @@ export default function App() {
         onBack={() => setOverlay(null)}
         onDeleted={() => setOverlay(null)}
         onOpenTask={(id) => setOverlay({ type: "task", id })}
+        onExplainScore={() => setOverlay({ type: "scoreHelp" })}
       />
     );
   } else if (overlay?.type === "beforeAfter") {
     content = <BeforeAfter onBack={() => setOverlay(null)} />;
+  } else if (overlay?.type === "scoreHelp") {
+    content = <ScoreExplainer onBack={() => setOverlay(null)} />;
   } else if (tab === "team") {
     content = (
       <Dashboard
         onOpenMember={(id) => setOverlay({ type: "member", id })}
         onOpenBeforeAfter={() => setOverlay({ type: "beforeAfter" })}
+        onExplainScore={() => setOverlay({ type: "scoreHelp" })}
       />
     );
   } else {

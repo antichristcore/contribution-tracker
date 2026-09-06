@@ -1,8 +1,13 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import CommitCard from "../components/CommitCard";
+import CommitHeatmap from "../components/CommitHeatmap";
+import GithubUsernameField from "../components/GithubUsernameField";
+import MemberRoleEditor from "../components/MemberRoleEditor";
+import ScoreBreakdown from "../components/ScoreBreakdown";
 import TaskRow from "../components/TaskRow";
 import { api } from "../lib/api";
 import { formatScore, roleLabel } from "../lib/status";
+import { days, people } from "../lib/words";
 import { haptic } from "../lib/telegram";
 import type { Member, MemberDetail as MemberDetailData } from "../lib/types";
 
@@ -16,44 +21,44 @@ interface Props {
   onBack: () => void;
   onDeleted: () => void;
   onOpenTask: (taskId: number) => void;
+  onExplainScore: () => void;
 }
 
-export default function MemberDetail({ memberId, currentMember, onBack, onDeleted, onOpenTask }: Props) {
+export default function MemberDetail({
+  memberId,
+  currentMember,
+  onBack,
+  onDeleted,
+  onOpenTask,
+  onExplainScore,
+}: Props) {
   const [data, setData] = useState<MemberDetailData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [githubInput, setGithubInput] = useState("");
-  const [savingGithub, setSavingGithub] = useState(false);
 
   useEffect(() => {
     api
       .get<MemberDetailData>(`/members/${memberId}`)
-      .then((d) => {
-        setData(d);
-        setGithubInput(d.member.github_mapping?.github_username ?? "");
-      })
+      .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Не удалось загрузить участника"));
   }, [memberId]);
 
+  const isTeamlead = currentMember.system_role === "teamlead";
   const isOwnProfile = currentMember.id === memberId;
-  const canDelete = currentMember.system_role === "teamlead" || isOwnProfile;
-  const canEditGithub = currentMember.system_role === "teamlead" || currentMember.id === memberId;
-
-  async function saveGithub() {
-    setSavingGithub(true);
-    try {
-      await api.patch(`/members/${memberId}`, { github_username: githubInput.trim().replace(/^@/, "") || null });
-      haptic("success");
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "Не удалось сохранить GitHub username");
-    } finally {
-      setSavingGithub(false);
-    }
-  }
+  const canDelete = isTeamlead || isOwnProfile;
+  const canEditGithub = isTeamlead || isOwnProfile;
 
   async function handleDelete() {
-    const who = isOwnProfile ? "свои метрики" : `все метрики участника «${data?.member.display_name}»`;
-    if (!confirm(`Удалить ${who}? Действие необратимо.`)) return;
+    // Пишем, что именно произойдёт: коммиты и задачи остаются в проекте, но
+    // теряют владельца. «Удалить метрики» этого не объясняет, а откатить нельзя.
+    const who = isOwnProfile ? "свои данные" : `данные участника «${data?.member.display_name}»`;
+    if (
+      !confirm(
+        `Удалить ${who}? Коммиты и задачи останутся в проекте, но перестанут быть привязаны к человеку, ` +
+          `а история его вклада сотрётся. Отменить это нельзя.`
+      )
+    )
+      return;
     setDeleting(true);
     try {
       await api.delete(`/members/${memberId}/profile`);
@@ -80,10 +85,24 @@ export default function MemberDetail({ memberId, currentMember, onBack, onDelete
           <h1 className="mb-1 text-xl font-bold text-[var(--tg-text-color)]">{data.member.display_name}</h1>
           <div className="mb-4 text-sm text-[var(--tg-hint-color)]">{roleLabel(data.member.role_in_team)}</div>
 
+          {isTeamlead && (
+            <MemberRoleEditor
+              member={data.member}
+              isSelf={isOwnProfile}
+              onSaved={(m) => setData({ ...data, member: m })}
+            />
+          )}
+
           <div className="mb-4 grid grid-cols-2 gap-2">
-            <MetricTile label="Score" value={formatScore(data.latest?.contribution_score ?? null)} />
+            {/* Разбор считается прямо сейчас, а latest — с прошлого пересчёта.
+                Если плитка возьмёт latest, а разбор покажет свежее число,
+                расхождение прочитается как баг. */}
             <MetricTile
-              label="Коммиты / 7д"
+              label="Вклад"
+              value={formatScore(data.breakdown?.score ?? data.latest?.contribution_score ?? null)}
+            />
+            <MetricTile
+              label="Коммиты за неделю"
               value={data.latest ? String(data.latest.commits_count_7d) : "—"}
             />
             <MetricTile
@@ -93,71 +112,72 @@ export default function MemberDetail({ memberId, currentMember, onBack, onDelete
               }
             />
             <MetricTile
-              label="Активность"
+              label="Последняя активность"
               value={
                 data.latest?.last_activity_days_ago != null
-                  ? `${data.latest.last_activity_days_ago} дн. назад`
+                  ? `${days(data.latest.last_activity_days_ago)} назад`
                   : "—"
               }
             />
           </div>
 
-          <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
-            <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">GitHub</div>
-            {canEditGithub ? (
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 rounded-xl bg-[var(--tg-secondary-bg-color)] px-3 py-2 text-sm text-[var(--tg-text-color)] outline-none"
-                  placeholder="username"
-                  value={githubInput}
-                  onChange={(e) => setGithubInput(e.target.value)}
-                />
-                <button
-                  onClick={saveGithub}
-                  disabled={savingGithub}
-                  className="rounded-xl bg-[var(--tg-button-color)] px-4 py-2 text-sm font-medium text-[var(--tg-button-text-color)] disabled:opacity-60"
-                >
-                  {savingGithub ? "..." : "Сохранить"}
-                </button>
-              </div>
-            ) : (
-              <div className="text-sm text-[var(--tg-text-color)]">
-                {data.member.github_mapping?.github_username ?? "не указан"}
-              </div>
-            )}
-          </div>
+          {data.breakdown && <ScoreBreakdown breakdown={data.breakdown} onExplain={onExplainScore} />}
+
+          <GithubUsernameField
+            memberId={memberId}
+            username={data.member.github_mapping?.github_username ?? null}
+            canEdit={canEditGithub}
+            onSaved={(username) =>
+              setData({
+                ...data,
+                member: {
+                  ...data.member,
+                  github_mapping: {
+                    git_author_email: data.member.github_mapping?.git_author_email ?? null,
+                    git_author_name: data.member.github_mapping?.git_author_name ?? null,
+                    github_username: username,
+                  },
+                },
+              })
+            }
+          />
 
           {data.diagnosis && (
             <div className="mb-4 rounded-xl bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
-              <div className="font-semibold">Возможный сигнал</div>
+              <div className="font-semibold">На что обратить внимание</div>
               <div>{data.diagnosis.explanation}</div>
             </div>
           )}
 
           <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
-            <div className="mb-1 text-sm font-semibold text-[var(--tg-text-color)]">Score за 3 недели</div>
+            <div className="mb-1 text-sm font-semibold text-[var(--tg-text-color)]">Вклад за 3 недели</div>
             <div className="mb-2 text-[11px] text-[var(--tg-hint-color)]">
               {data.peer_basis === "role"
-                ? `Сравнение внутри роли «${roleLabel(data.member.role_in_team)}» (${data.role_peer_count} чел.)`
-                : `Сравнение по всей команде — в роли «${roleLabel(data.member.role_in_team)}» ${
-                    data.role_peer_count === 1 ? "только один человек" : "не с кем сравнивать"
-                  }`}
+                ? `Сравниваем с ролью «${roleLabel(data.member.role_in_team)}», в ней ${people(
+                    data.role_peer_count
+                  )}`
+                : `В роли «${roleLabel(data.member.role_in_team)}» сравнивать не с кем, поэтому сравниваем со всей командой`}
             </div>
             <Suspense fallback={<ChartSkeleton />}>
               <ScoreChart history={data.history} />
             </Suspense>
           </div>
 
+          <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
+            <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">Активность</div>
+            <CommitHeatmap memberId={memberId} />
+          </div>
+
           <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">Коммиты</div>
           {data.commits.length === 0 && (
             <div className="mb-4 text-sm text-[var(--tg-hint-color)]">
-              Коммитов пока нет — либо не было активности, либо GitHub ещё не синхронизирован.
+              Коммитов пока нет. Либо работы не было, либо GitHub ещё не синхронизировался.
             </div>
           )}
           {data.commits.length > 0 && (
             <div className="mb-4">
               {data.commits.map((c) => (
-                <CommitCard key={c.id} commit={c} />
+                <CommitCard key={c.id} commit={c} showTask />
               ))}
             </div>
           )}

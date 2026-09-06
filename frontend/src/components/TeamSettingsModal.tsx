@@ -136,8 +136,14 @@ export default function TeamSettingsModal({ onClose, onSaved }: Props) {
             />
 
             <label className="mb-1 block text-xs text-[var(--tg-hint-color)]">
-              GitHub-токен (нужен только для приватного репозитория)
+              GitHub-токен
             </label>
+            <div className="mb-1.5 text-[11px] leading-snug text-[var(--tg-hint-color)]">
+              Обязателен для приватного репозитория. Публичному формально не нужен, но без токена
+              GitHub разрешает всего 60 обращений в час на всю команду. Их тратят и загрузка
+              коммитов, и проверка логинов, поэтому и то и другое начинает срываться. С токеном
+              лимит 5000.
+            </div>
             <div className="mb-1 flex gap-2">
               <input
                 type="password"
@@ -167,7 +173,7 @@ export default function TeamSettingsModal({ onClose, onSaved }: Props) {
             {candidates && (
               <div className="mb-3 rounded-xl bg-[var(--tg-secondary-bg-color)] p-2">
                 <div className="mb-1 px-1 text-[11px] text-[var(--tg-hint-color)]">
-                  Токен даёт доступ к нескольким репозиториям — выбери нужный:
+                  Токен даёт доступ к нескольким репозиториям. Выбери нужный:
                 </div>
                 {candidates.map((r) => (
                   <button

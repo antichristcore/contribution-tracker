@@ -44,10 +44,18 @@ def commit_url(team: Team | None, sha: str) -> str | None:
     return f"https://github.com/{team.github_owner}/{team.github_repo}/commit/{sha}"
 
 
+def task_numbers(db: Session, task_ids: set[int]) -> dict[int, int]:
+    ids = {t for t in task_ids if t}
+    if not ids:
+        return {}
+    return dict(db.query(Task.id, Task.number).filter(Task.id.in_(ids)).all())
+
+
 def commits_to_out(db: Session, commits: list[Commit], team: Team | None = None) -> list[CommitOut]:
     """Commits with a human author name — the resolved team member when we
     know them, otherwise whatever git recorded."""
     names = member_names(db, {c.member_id for c in commits})
+    numbers = task_numbers(db, {c.task_id for c in commits})
     return [
         CommitOut(
             id=c.id,
@@ -58,6 +66,7 @@ def commits_to_out(db: Session, commits: list[Commit], team: Team | None = None)
             deletions=c.deletions,
             author_name=names.get(c.member_id) or c.raw_author_name or c.raw_author_login,
             html_url=commit_url(team, c.sha),
+            task_number=numbers.get(c.task_id),
         )
         for c in commits
     ]

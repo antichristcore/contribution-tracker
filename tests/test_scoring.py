@@ -1,75 +1,35 @@
-"""Тест-матрица по формуле вклада.
+"""Формула вклада на живых данных: от строк в базе до балла.
 
-Покрывает четыре дефекта, найденных при ревью:
-  1. normalize() без потолка — аномальный коммит ломал шкалу;
-  2. tasks_assigned = 0 отнимал 35% у человека, которому не дали задач;
-  3. нормализация «по роли» молча откатывалась на всю команду;
-  4. отсутствие потолка на размер одного коммита.
+Здесь же зафиксированы поломки, ради которых формулу переписывали. Обе были
+найдены не в тестах, а на реальном проекте, где балл участника сводился к
+`0.35 × (мои строки / медиана)`, а остальные 50% веса были структурно нулевыми:
+
+  1. компонента ревью обнулялась в команде, которая коммитит прямо в main
+     без PR, — минус 15% одинаково у всех;
+  2. дедлайн стоял на полночь, и задача, сданная в день дедлайна днём,
+     считалась просроченной, — минус ещё 35%.
 """
 
 import pytest
-from tests.conftest import NOW, make_commit, make_member, make_task, raw_metrics
 
 from backend.app.models import TaskStatus
 from backend.app.services.scoring import (
     MAX_LINES_PER_COMMIT,
-    NORMALIZE_CAP,
-    STUCK_RED_DAYS,
-    W_LINES,
-    W_PENALTY,
+    RHYTHM_WINDOW_DAYS,
+    SCORE_MAX,
     W_REVIEWS,
-    W_TASKS,
+    active_days,
     compute_team_scores,
-    contribution_score,
     get_raw_metrics,
-    normalize,
-    penalty,
+    team_has_reviews,
 )
-
-# Во сколько раз растут веса оставшихся компонент, когда задач не назначено.
-ZERO_TASK_SCALE = (W_LINES + W_TASKS + W_REVIEWS) / (W_LINES + W_REVIEWS)
-
-
-# --- normalize ---------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value, peers, expected",
-    [
-        (100, [100, 100, 100], 1.0),   # ровно медиана
-        (50, [100, 100, 100], 0.5),    # вдвое ниже
-        (200, [100, 100, 100], 2.0),   # ровно на потолке
-        (0, [100, 100], 0.0),          # ничего не сделал
-        (5, [0, 0, 0], 1.0),           # медиана 0, но активность есть
-        (0, [0, 0, 0], 0.0),           # медиана 0 и активности нет
-        (100, [], 1.0),                # не с кем сравнивать
-    ],
-)
-def test_normalize_basic(value, peers, expected):
-    assert normalize(value, peers) == pytest.approx(expected)
-
-
-def test_normalize_capped_on_outlier():
-    """Дефект №1: 10 000 строк против медианы 500 давали норму 20."""
-    assert normalize(10_000, [500, 500, 500]) == NORMALIZE_CAP
-
-
-def test_outlier_cannot_dominate_the_scale():
-    """Даже с аномалией вклад по коду не превышает своего веса × потолок."""
-    score = contribution_score(
-        raw_metrics(commits_lines_changed_7d=10_000, tasks_assigned=1, tasks_completed_on_time=1),
-        peers_lines_changed=[500, 500, 500],
-        peers_pr_reviews=[0, 0],
-    )
-    assert score == pytest.approx(W_LINES * NORMALIZE_CAP + W_TASKS * 1.0)
-    assert score <= W_LINES * NORMALIZE_CAP + W_TASKS + W_REVIEWS * NORMALIZE_CAP
-
+from tests.conftest import NOW, make_commit, make_member, make_pr_review, make_task
 
 # --- потолок на один коммит ---------------------------------------------------
 
 
 def test_generated_file_commit_is_capped(db, team):
-    """Дефект №4: package-lock.json на 10 000 строк засчитывается как потолок."""
+    """package-lock.json на 10 000 строк засчитывается как потолок."""
     m = make_member(db, team, name="Аня")
     make_commit(db, team, m, days_ago=1, additions=9_500, deletions=500)
 
@@ -93,95 +53,155 @@ def test_commits_outside_the_window_are_ignored(db, team):
     assert get_raw_metrics(db, m, NOW)["commits_lines_changed_7d"] == 100
 
 
-# --- компонента задач ---------------------------------------------------------
+# --- задачи и дедлайны --------------------------------------------------------
 
 
-def test_no_tasks_assigned_is_neutral_not_zero():
-    """Дефект №2: новичок без задач не должен терять 35%.
-
-    Оба участника коммитят ровно на уровне медианы. Разница между ними только
-    в том, что одному тимлид успел назначить задачу, а другому нет.
-    """
-    peers = [100, 100]
-    newcomer = raw_metrics(commits_lines_changed_7d=100, tasks_assigned=0)
-    with_task = raw_metrics(commits_lines_changed_7d=100, tasks_assigned=1, tasks_completed_on_time=1)
-
-    score_newcomer = contribution_score(newcomer, peers, [0, 0])
-    score_with_task = contribution_score(with_task, peers, [0, 0])
-
-    assert score_newcomer == pytest.approx(W_LINES * ZERO_TASK_SCALE)
-    # До фикса разрыв был ровно W_TASKS = 0.35 — новичок проваливался в жёлтый
-    # ни за что. Теперь отставание втрое меньше.
-    assert score_with_task - score_newcomer < W_TASKS / 3
-
-
-def test_zero_tasks_redistributes_weight_and_keeps_total():
-    """Сумма весов не меняется: компонента задач исключается, остальные растут."""
-    metrics = raw_metrics(commits_lines_changed_7d=100, pr_review_comments_given=1, tasks_assigned=0)
-
-    # lines_norm = 1.0 и pr_norm = 1.0 -> идеально средний участник получает
-    # всю положительную часть шкалы.
-    assert contribution_score(metrics, [100, 100], [1, 1]) == pytest.approx(
-        W_LINES + W_TASKS + W_REVIEWS
-    )
-
-
-def test_assigned_but_nothing_done_is_penalised():
-    """Обратная сторона: задачи есть и не сделаны — это уже сигнал."""
-    metrics = raw_metrics(commits_lines_changed_7d=100, tasks_assigned=4, tasks_completed_on_time=0)
-    assert contribution_score(metrics, [100, 100], [0, 0]) == pytest.approx(W_LINES)
-
-
-@pytest.mark.parametrize(
-    "assigned, on_time, expected_ratio",
-    [(4, 4, 1.0), (4, 2, 0.5), (4, 0, 0.0), (1, 1, 1.0)],
-)
-def test_tasks_ratio(assigned, on_time, expected_ratio):
-    metrics = raw_metrics(tasks_assigned=assigned, tasks_completed_on_time=on_time)
-    assert contribution_score(metrics, [0], [0]) == pytest.approx(W_TASKS * expected_ratio)
-
-
-def test_only_tasks_finished_before_the_deadline_count(db, team):
+def test_task_closed_on_the_deadline_day_counts_as_on_time(db, team):
+    """Регрессия. Дедлайн почти всегда стоит на полночь, и задача, сданная в
+    тот же день в 11 утра, формально оказывалась просроченной. Срок считается
+    по дню."""
     m = make_member(db, team, name="Гриша")
-    # deadline_days_ago отрицательный -> дедлайн в будущем.
-    make_task(db, team, m, status=TaskStatus.done, deadline_days_ago=-2, completed_days_ago=1)
-    make_task(db, team, m, status=TaskStatus.done, deadline_days_ago=5, completed_days_ago=1)
+    task = make_task(db, team, m, status=TaskStatus.done, deadline_days_ago=1, completed_days_ago=1)
+    # дедлайн — полночь того же дня, работа закончена днём
+    task.deadline_at = task.deadline_at.replace(hour=0, minute=0)
+    task.completed_at = task.completed_at.replace(hour=11, minute=11)
+    db.commit()
 
-    metrics = get_raw_metrics(db, m, NOW)
-    assert metrics["tasks_assigned"] == 2
-    assert metrics["tasks_completed_on_time"] == 1
-
-
-# --- штраф за застой ----------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "stuck_days, expected",
-    [
-        (0, 0.0),
-        (1, 1 / STUCK_RED_DAYS),
-        (STUCK_RED_DAYS - 1, (STUCK_RED_DAYS - 1) / STUCK_RED_DAYS),
-        (STUCK_RED_DAYS, 1.0),
-        (STUCK_RED_DAYS * 3, 1.0),  # дальше не растёт
-    ],
-)
-def test_penalty_is_capped_at_the_red_threshold(stuck_days, expected):
-    assert penalty(stuck_days) == pytest.approx(expected)
+    raw = get_raw_metrics(db, m, NOW)
+    assert raw["tasks_deadline_eligible"] == 1
+    assert raw["tasks_completed_on_time"] == 1
 
 
-def test_penalty_lowers_the_score():
-    metrics = raw_metrics(
-        tasks_assigned=1, tasks_completed_on_time=1, tasks_status_stuck_days_max=STUCK_RED_DAYS
-    )
-    assert contribution_score(metrics, [0], [0]) == pytest.approx(W_TASKS - W_PENALTY)
+def test_task_closed_the_next_day_is_late(db, team):
+    m = make_member(db, team, name="Дима")
+    make_task(db, team, m, status=TaskStatus.done, deadline_days_ago=3, completed_days_ago=1)
+
+    assert get_raw_metrics(db, m, NOW)["tasks_completed_on_time"] == 0
+
+
+def test_task_without_a_deadline_is_out_of_the_ratio(db, team):
+    """Дедлайн не проставил тимлид — исполнителю за это ничего не должно быть
+    ни в плюс, ни в минус: задача не попадает ни в числитель, ни в знаменатель."""
+    m = make_member(db, team, name="Женя")
+    make_task(db, team, m, status=TaskStatus.done, completed_days_ago=2)
+
+    raw = get_raw_metrics(db, m, NOW)
+    assert raw["tasks_assigned"] == 1
+    assert raw["tasks_deadline_eligible"] == 0
+
+
+def test_open_task_with_a_future_deadline_is_not_a_failure_yet(db, team):
+    """Срок ещё не наступил — это не провал и не успех, просто работа в процессе."""
+    m = make_member(db, team, name="Зина")
+    make_task(db, team, m, status=TaskStatus.in_progress, deadline_days_ago=-5)
+
+    assert get_raw_metrics(db, m, NOW)["tasks_deadline_eligible"] == 0
+
+
+def test_overdue_open_task_counts_against_the_ratio(db, team):
+    """А просроченная и незакрытая — попадает в знаменатель, иначе метрику
+    можно обойти, просто никогда ничего не завершая."""
+    m = make_member(db, team, name="Игорь")
+    make_task(db, team, m, status=TaskStatus.in_progress, deadline_days_ago=3)
+
+    raw = get_raw_metrics(db, m, NOW)
+    assert raw["tasks_deadline_eligible"] == 1
+    assert raw["tasks_completed_on_time"] == 0
+
+
+# --- ритм ---------------------------------------------------------------------
+
+
+def test_active_days_counts_distinct_days(db, team):
+    """Три коммита в один день — это один день активности, а не три."""
+    m = make_member(db, team, name="Костя")
+    for _ in range(3):
+        make_commit(db, team, m, days_ago=2)
+    make_commit(db, team, m, days_ago=5)
+
+    assert active_days(db, m.id, NOW, RHYTHM_WINDOW_DAYS) == 2
+
+
+def test_active_days_ignores_commits_outside_the_window(db, team):
+    m = make_member(db, team, name="Лена")
+    make_commit(db, team, m, days_ago=1)
+    make_commit(db, team, m, days_ago=RHYTHM_WINDOW_DAYS + 5)
+
+    assert active_days(db, m.id, NOW, RHYTHM_WINDOW_DAYS) == 1
+
+
+def test_burst_of_work_scores_lower_than_the_same_work_spread_out(db, team):
+    """Смысл компоненты ритма: аврал в ночь перед сдачей — не то же самое,
+    что ровная работа две недели, даже при одинаковом объёме кода."""
+    burst = make_member(db, team, name="Аврал", role="backend")
+    steady = make_member(db, team, name="Ровный", role="backend")
+    for _ in range(7):
+        make_commit(db, team, burst, days_ago=1, additions=100, deletions=0)
+    for day in range(1, 8):
+        make_commit(db, team, steady, days_ago=day, additions=100, deletions=0)
+
+    scores = {r["member"].id: r["score"] for r in compute_team_scores(db, [burst, steady], NOW)}
+    assert scores[steady.id] > scores[burst.id]
+
+
+# --- исключение компонент -----------------------------------------------------
+
+
+def test_team_without_pull_requests_drops_the_review_component(db, team):
+    """Регрессия. Команда коммитит прямо в main, ревью не будет никогда —
+    компонента должна исчезнуть, а её вес уйти остальным. Раньше она молча
+    обнулялась, и все теряли одинаковые 15%."""
+    a = make_member(db, team, name="Аня", role="backend")
+    b = make_member(db, team, name="Боря", role="backend")
+    for m in (a, b):
+        make_commit(db, team, m, additions=100)
+
+    assert team_has_reviews(db, team.id) is False
+    breakdown = compute_team_scores(db, [a, b], NOW)[0]["breakdown"]
+    reviews = next(c for c in breakdown["components"] if c["key"] == "reviews")
+
+    assert reviews["excluded"] is True
+    assert reviews["weight"] == 0
+    assert "reviews_excluded" in breakdown["notes"]
+    # Вес не пропал, а разошёлся по остальным.
+    positive = [c for c in breakdown["components"] if c["key"] != "penalty"]
+    assert sum(c["weight"] for c in positive) == pytest.approx(SCORE_MAX, abs=0.3)
+
+
+def test_review_component_returns_once_the_team_uses_pull_requests(db, team):
+    a = make_member(db, team, name="Аня", role="backend")
+    b = make_member(db, team, name="Боря", role="backend")
+    for m in (a, b):
+        make_commit(db, team, m, additions=100)
+        # Задача с прошедшим сроком, чтобы не исключилась и компонента задач:
+        # тогда вес ревью — ровно свой, без перераспределения.
+        make_task(db, team, m, status=TaskStatus.done, deadline_days_ago=3, completed_days_ago=4)
+    make_pr_review(db, team, a, days_ago=1)
+
+    assert team_has_reviews(db, team.id) is True
+    breakdown = compute_team_scores(db, [a, b], NOW)[0]["breakdown"]
+    reviews = next(c for c in breakdown["components"] if c["key"] == "reviews")
+
+    assert reviews["excluded"] is False
+    assert reviews["weight"] == W_REVIEWS
+
+
+def test_member_without_tasks_is_not_punished_for_it(db, team):
+    """Задач не назначено — это решение тимлида, а не поведение участника.
+    Компонента исключается, вес уходит остальным."""
+    a = make_member(db, team, name="Аня", role="backend")
+    b = make_member(db, team, name="Боря", role="backend")
+    for m in (a, b):
+        make_commit(db, team, m, additions=100)
+
+    breakdown = compute_team_scores(db, [a, b], NOW)[0]["breakdown"]
+    tasks = next(c for c in breakdown["components"] if c["key"] == "tasks")
+
+    assert tasks["excluded"] is True
+    assert "tasks_excluded" in breakdown["notes"]
 
 
 # --- нет данных ---------------------------------------------------------------
-
-
-def test_member_without_data_gets_none_not_zero():
-    """«Нет данных» и «ноль» — разные вещи."""
-    assert contribution_score(raw_metrics(has_data=False), [100], [1]) is None
 
 
 def test_has_data_requires_github_or_tasks(db, team):
@@ -196,7 +216,7 @@ def test_has_data_requires_github_or_tasks(db, team):
 
 
 def test_peer_basis_is_team_when_role_has_one_person(db, team):
-    """Дефект №3: в роли один человек — сравнение идёт по команде, и это видно."""
+    """В роли один человек — сравнение идёт по команде, и это видно наружу."""
     backend = make_member(db, team, name="Аня", role="backend")
     frontend = make_member(db, team, name="Боря", role="frontend")
     for m in (backend, frontend):
@@ -206,6 +226,7 @@ def test_peer_basis_is_team_when_role_has_one_person(db, team):
 
     assert results[backend.id]["peer_basis"] == "team"
     assert results[backend.id]["role_peer_count"] == 1
+    assert "peer_fallback_team" in results[backend.id]["breakdown"]["notes"]
 
 
 def test_peer_basis_is_role_when_there_are_enough_peers(db, team):
@@ -236,9 +257,9 @@ def test_role_normalisation_protects_a_designer_from_backend_volume(db, team):
     results = {r["member"].id: r for r in compute_team_scores(db, [be1, be2, d1, d2], NOW)}
 
     # Дизайнер пишет в 20 раз меньше строк, но внутри своей роли он ровно
-    # средний — score не должен его за это наказывать.
+    # средний — балл не должен его за это наказывать.
     assert results[d1.id]["peer_basis"] == "role"
-    assert results[d1.id]["score"] == pytest.approx(results[be1.id]["score"])
+    assert results[d1.id]["score"] == results[be1.id]["score"]
 
 
 def test_members_without_data_do_not_drag_the_median(db, team):
@@ -252,4 +273,4 @@ def test_members_without_data_do_not_drag_the_median(db, team):
 
     assert results[ghost.id]["score"] is None
     assert results[a.id]["role_peer_count"] == 2  # призрак не считается сравнимым
-    assert results[a.id]["score"] == pytest.approx(results[b.id]["score"])
+    assert results[a.id]["score"] == results[b.id]["score"]

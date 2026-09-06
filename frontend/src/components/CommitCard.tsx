@@ -6,11 +6,14 @@ interface Props {
   /** Detach control ("×"), shown only where unlinking makes sense. */
   onDetach?: () => void;
   detachDisabled?: boolean;
+  /** Показывать, к какой задаче привязан коммит. Внутри самой задачи это
+   *  очевидно и только шумит, а в списках активности — самое полезное. */
+  showTask?: boolean;
 }
 
 /** One commit: message, author, date, diff size, short sha. Taps through to
  *  GitHub when the team has a repo connected (synthetic demo commits don't). */
-export default function CommitCard({ commit, onDetach, detachDisabled }: Props) {
+export default function CommitCard({ commit, onDetach, detachDisabled, showTask }: Props) {
   const url = commit.html_url;
 
   function open() {
@@ -55,8 +58,16 @@ export default function CommitCard({ commit, onDetach, detachDisabled }: Props) 
           )}
         </div>
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-[var(--tg-hint-color)]">
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--tg-hint-color)]">
         <span>{commit.author_name ?? "неизвестный автор"}</span>
+        {showTask &&
+          (commit.task_number ? (
+            <span className="rounded-full bg-[var(--tg-secondary-bg-color)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--tg-text-color)]">
+              #{commit.task_number}
+            </span>
+          ) : (
+            <span className="italic">без задачи</span>
+          ))}
         <span>{new Date(commit.authored_at).toLocaleDateString("ru-RU")}</span>
         {(commit.additions !== null || commit.deletions !== null) && (
           <span>

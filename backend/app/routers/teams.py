@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from backend.app.bot.bot_instance import bot
 from backend.app.deps import TelegramUser, get_current_telegram_user, get_db, require_teamlead
 from backend.app.models import Member, SystemRole, Team
+from backend.app.services.github_identity import check_github_username
 from backend.app.services.team_membership import (
     TeamNameTakenError,
     create_team,
@@ -38,6 +39,9 @@ class TeamCreate(BaseModel):
     name: str
     github_owner: str | None = None
     github_repo: str | None = None
+    # Без GitHub-логина в проект не пускаем — ни участника, ни тимлида:
+    # человек без привязки для трекера вклада просто не существует.
+    github_username: str
 
 
 class TeamOut(BaseModel):
@@ -49,7 +53,7 @@ class TeamOut(BaseModel):
 class TeamJoin(BaseModel):
     invite_code: str
     role_in_team: str = "member"
-    github_username: str | None = None
+    github_username: str
 
 
 class InviteOut(BaseModel):
@@ -84,11 +88,15 @@ def get_my_teams(
 
 
 @router.post("/api/teams", response_model=TeamOut, status_code=status.HTTP_201_CREATED)
-def api_create_team(
+async def api_create_team(
     payload: TeamCreate,
     tg_user: TelegramUser = Depends(get_current_telegram_user),
     db: Session = Depends(get_db),
 ) -> TeamOut:
+    # Токена ещё нет — проект только создаётся, проверка идёт анонимно.
+    check = await check_github_username(payload.github_username)
+    if not check.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, check.error)
     try:
         team, member = create_team(
             db,
@@ -98,6 +106,7 @@ def api_create_team(
             tg_user.first_name,
             github_owner=payload.github_owner,
             github_repo=payload.github_repo,
+            github_username=check.login,
         )
     except TeamNameTakenError:
         raise HTTPException(status.HTTP_409_CONFLICT, "Проект с таким названием уже существует, выбери другое")
@@ -105,11 +114,17 @@ def api_create_team(
 
 
 @router.post("/api/teams/join", response_model=TeamOut)
-def api_join_team(
+async def api_join_team(
     payload: TeamJoin,
     tg_user: TelegramUser = Depends(get_current_telegram_user),
     db: Session = Depends(get_db),
 ) -> TeamOut:
+    joining = db.query(Team).filter(Team.invite_code == payload.invite_code.strip().upper()).first()
+    check = await check_github_username(
+        payload.github_username, joining.github_token if joining else None
+    )
+    if not check.ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, check.error)
     result = join_team_by_code(
         db,
         payload.invite_code,
@@ -117,7 +132,7 @@ def api_join_team(
         tg_user.username,
         tg_user.first_name,
         payload.role_in_team,
-        github_username=payload.github_username,
+        github_username=check.login,
     )
     if not result:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Неверный код приглашения")

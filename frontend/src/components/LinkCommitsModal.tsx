@@ -64,7 +64,7 @@ export default function LinkCommitsModal({ taskId, onClose, onLinked }: Props) {
         )}
         {candidates?.length === 0 && (
           <div className="py-6 text-center text-sm text-[var(--tg-hint-color)]">
-            Свободных коммитов нет — все уже привязаны к задачам.
+            Непривязанных коммитов нет: все уже относятся к каким-то задачам.
           </div>
         )}
 

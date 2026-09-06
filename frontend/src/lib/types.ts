@@ -71,6 +71,67 @@ export interface Bootstrap {
   team_id: number | null;
   member: Member | null;
   tasks: Task[] | null;
+  /** Участник в проекте, но без привязки к GitHub — сначала блокирующий экран. */
+  needs_github_username: boolean;
+  /** Логин, введённый в любом другом проекте: логин принадлежит человеку, а не
+   *  его участию в конкретном проекте. */
+  known_github_username: string | null;
+}
+
+export type ScoreComponentKey = "tasks" | "code" | "rhythm" | "reviews" | "penalty";
+
+export interface ScoreComponent {
+  key: ScoreComponentKey;
+  /** Вес уже после перераспределения: исключённая компонента отдаёт свой остальным. */
+  weight: number;
+  value: number | null;
+  points: number;
+  excluded: boolean;
+  done_on_time?: number | null;
+  eligible?: number | null;
+  assigned?: number | null;
+  raw_value?: number | null;
+  peer_median?: number | null;
+  capped?: boolean | null;
+  active_days?: number | null;
+  target_days?: number | null;
+  window_days?: number | null;
+  stuck_days?: number | null;
+  red_days?: number | null;
+}
+
+export interface ScoreBreakdown {
+  score: number;
+  components: ScoreComponent[];
+  notes: string[];
+}
+
+export interface ScoreFormula {
+  score_max: number;
+  weight_tasks: number;
+  weight_code: number;
+  weight_rhythm: number;
+  weight_reviews: number;
+  penalty_max: number;
+  code_window_days: number;
+  rhythm_window_days: number;
+  rhythm_target_days: number;
+  normalize_cap: number;
+  max_lines_per_commit: number;
+  stuck_red_days: number;
+  yellow_streak_days: number;
+  yellow_to_red_extra_days: number;
+  yellow_below_median_percent: number;
+  yellow_inactive_days: number;
+}
+
+export interface GithubCheck {
+  ok: boolean;
+  login: string | null;
+  name: string | null;
+  avatar_url: string | null;
+  error: string | null;
+  warning: string | null;
 }
 
 export interface CommitInfo {
@@ -82,6 +143,7 @@ export interface CommitInfo {
   deletions: number | null;
   author_name: string | null;
   html_url: string | null;
+  task_number: number | null;
 }
 
 export interface TaskHistoryEntry {
@@ -106,6 +168,7 @@ export interface MemberDetail {
   commits: CommitInfo[];
   peer_basis: "role" | "team" | null;
   role_peer_count: number;
+  breakdown: ScoreBreakdown | null;
 }
 
 export interface TeamSummaryMember {

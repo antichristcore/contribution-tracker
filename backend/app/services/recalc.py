@@ -2,7 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from backend.app.models import Member, ScoreHistory, StatusColor, SystemRole, Team
+from backend.app.models import Member, ScoreHistory, StatusColor, Team
 from backend.app.services import notifications
 from backend.app.services.scoring import compute_team_scores, evaluate_thresholds
 from backend.app.utils.time import utcnow
@@ -10,12 +10,14 @@ from backend.app.utils.time import utcnow
 
 async def recalculate_team_scores(db: Session, team: Team, as_of: datetime | None = None) -> list[dict]:
     as_of = as_of or utcnow()
-    # The teamlead isn't a tracked contributor — the whole point of the product is
-    # monitoring the *team*, and every member-facing screen already hides
-    # them from the roster, so they shouldn't show up in score/status counts.
+    # Тимлид тоже коммитит, поэтому балл считаем и ему — иначе его карточка
+    # в списке участников пустая. А вот из «пульса команды», графика динамики,
+    # медианы для нормализации и порогов, а также из уведомлений он по-прежнему
+    # исключён: это метрики про людей, за которыми он следит, и его собственные
+    # цифры их бы искажали.
     members = (
         db.query(Member)
-        .filter(Member.team_id == team.id, Member.is_active.is_(True), Member.system_role != SystemRole.teamlead)
+        .filter(Member.team_id == team.id, Member.is_active.is_(True))
         .all()
     )
     computed = compute_team_scores(db, members, as_of)

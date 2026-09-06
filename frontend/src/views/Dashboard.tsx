@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import InviteModal from "../components/InviteModal";
 import MemberCard from "../components/MemberCard";
+import CommitHeatmap from "../components/CommitHeatmap";
 import TeamPulse from "../components/TeamPulse";
 import TeamSettingsModal from "../components/TeamSettingsModal";
 import { api } from "../lib/api";
@@ -10,9 +11,10 @@ import type { MemberSummary, TeamSummary } from "../lib/types";
 interface Props {
   onOpenMember: (id: number) => void;
   onOpenBeforeAfter: () => void;
+  onExplainScore: () => void;
 }
 
-export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
+export default function Dashboard({ onOpenMember, onOpenBeforeAfter, onExplainScore }: Props) {
   const [members, setMembers] = useState<MemberSummary[] | null>(null);
   const [summary, setSummary] = useState<TeamSummary | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -70,7 +72,11 @@ export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
     return <div className="p-6 text-center text-[var(--tg-hint-color)]">Загрузка...</div>;
   }
 
-  const teamMembers = members.filter((m) => m.system_role !== "teamlead");
+  // Тимлида показываем тоже — он такой же участник и тоже коммитит. Наверх,
+  // чтобы список читался сверху вниз по роли, а не вперемешку.
+  const teamMembers = [...members].sort(
+    (a, b) => Number(b.system_role === "teamlead") - Number(a.system_role === "teamlead")
+  );
 
   return (
     <div className="p-4 pb-24">
@@ -86,7 +92,12 @@ export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
         </div>
       </div>
 
-      <TeamPulse summary={summary} />
+      <TeamPulse summary={summary} onExplain={onExplainScore} />
+
+      <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
+        <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">Активность команды</div>
+        <CommitHeatmap />
+      </div>
 
       <div className="mb-5 flex items-center justify-between">
         <button
@@ -100,18 +111,22 @@ export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
         <div className="text-right text-[11px] text-[var(--tg-hint-color)]">
           {lastUpdated && <div>Обновлено {lastUpdated.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</div>}
           <button onClick={onOpenBeforeAfter} className="text-[var(--tg-link-color)]">
-            📈 До / После
+            📈 Динамика
           </button>
         </div>
       </div>
 
-      {teamMembers.length === 0 ? (
-        <div className="rounded-2xl bg-[var(--tg-section-bg-color)] p-6 text-center text-sm text-[var(--tg-hint-color)]">
+      {/* Подсказка про приглашение нужна и теперь, когда в списке всегда есть
+          хотя бы карточка самого тимлида: без неё одинокий проект выглядит
+          законченным, а звать людей — главное первое действие. */}
+      {teamMembers.filter((m) => m.system_role !== "teamlead").length === 0 && (
+        <div className="mb-3 rounded-2xl bg-[var(--tg-section-bg-color)] p-6 text-center text-sm text-[var(--tg-hint-color)]">
           В команде пока только ты. Нажми «Пригласить», чтобы позвать участников.
         </div>
-      ) : (
-        teamMembers.map((m) => <MemberCard key={m.id} member={m} onClick={() => onOpenMember(m.id)} />)
       )}
+      {teamMembers.map((m) => (
+        <MemberCard key={m.id} member={m} onClick={() => onOpenMember(m.id)} />
+      ))}
 
       {showInviteModal && <InviteModal onClose={() => setShowInviteModal(false)} />}
 

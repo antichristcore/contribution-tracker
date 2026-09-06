@@ -14,6 +14,7 @@ from backend.app.db import Base, engine
 from backend.app.routers import auth, bootstrap, github_sync, members, presentation, scores, tasks, teams
 from backend.app.services.scheduler import start_scheduler, scheduler
 from backend.app.services.task_numbers import ensure_task_numbers
+from backend.app.utils.build_version import mini_app_url
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -34,7 +35,9 @@ async def lifespan(app: FastAPI):
             # the Mini App directly — no /start round-trip needed first.
             try:
                 await bot.set_chat_menu_button(
-                    menu_button=MenuButtonWebApp(text="Открыть", web_app=WebAppInfo(url=settings.MINI_APP_URL))
+                    menu_button=MenuButtonWebApp(
+                        text="Открыть", web_app=WebAppInfo(url=mini_app_url(settings.MINI_APP_URL))
+                    )
                 )
             except Exception:
                 logger.exception("Failed to set the bot's default menu button")

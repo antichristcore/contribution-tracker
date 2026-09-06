@@ -15,7 +15,7 @@ from backend.app.deps import TelegramUser, get_current_telegram_user, get_db
 from backend.app.models import Member, SystemRole, Task
 from backend.app.schemas import MemberOut, TaskOut
 from backend.app.services.task_utils import task_to_out
-from backend.app.services.team_membership import list_member_teams
+from backend.app.services.team_membership import known_github_username, list_member_teams
 
 router = APIRouter(prefix="/api", tags=["bootstrap"])
 
@@ -33,6 +33,13 @@ class BootstrapOut(BaseModel):
     team_id: int | None = None
     member: MemberOut | None = None
     tasks: list[TaskOut] | None = None
+    # Участник уже в проекте, но без привязки к GitHub — доска ему бесполезна,
+    # пока клиент не соберёт логин. Флаг отдаётся тем же запросом, чтобы
+    # блокирующий экран не стоил лишнего round-trip.
+    needs_github_username: bool = False
+    # Логин, который человек уже вводил в другом проекте: форма создания
+    # проекта подставляет его, чтобы не спрашивать одно и то же дважды.
+    known_github_username: str | None = None
 
 
 @router.get("/bootstrap", response_model=BootstrapOut)
@@ -43,6 +50,9 @@ def bootstrap(
     db: Session = Depends(get_db),
 ) -> BootstrapOut:
     pairs = _member_teams(db, tg_user, x_debug_member_id)
+    known_login = (
+        known_github_username(db, tg_user.telegram_user_id) if tg_user.telegram_user_id else None
+    )
 
     teams = [
         BootstrapTeam(
@@ -61,7 +71,7 @@ def bootstrap(
         current = pairs[0][0]
 
     if current is None:
-        return BootstrapOut(teams=teams)
+        return BootstrapOut(teams=teams, known_github_username=known_login)
 
     tasks = (
         db.query(Task)
@@ -69,11 +79,14 @@ def bootstrap(
         .order_by(Task.created_at.desc())
         .all()
     )
+    mapping = current.github_mapping
     return BootstrapOut(
         teams=teams,
         team_id=current.team_id,
         member=MemberOut.model_validate(current),
         tasks=[task_to_out(db, t) for t in tasks],
+        needs_github_username=not (mapping and mapping.github_username),
+        known_github_username=known_login,
     )
 
 

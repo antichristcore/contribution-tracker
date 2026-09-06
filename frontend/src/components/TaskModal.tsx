@@ -62,7 +62,7 @@ export default function TaskModal({ members, task, onClose, onSave }: Props) {
       >
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--tg-hint-color)] opacity-40" />
         <h2 className="mb-4 text-lg font-semibold text-[var(--tg-text-color)]">
-          {isEdit ? `Задача #${task!.id}` : "Новая задача"}
+          {isEdit ? `Задача #${task!.number}` : "Новая задача"}
         </h2>
 
         <input

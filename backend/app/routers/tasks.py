@@ -148,9 +148,9 @@ def attach_commits(
     )
     for commit in commits:
         commit.task_id = task.id
-        # Attaching by hand starts a task but never closes it — completion
-        # stays either a closing keyword in a commit or an explicit action.
-        advance_task_status(db, task, commit.authored_at, is_closing=False)
+        # Привязка — что руками, что по «#номер» — только начинает задачу.
+        # Закрыть её может только человек кнопкой «Отметить готовой».
+        advance_task_status(db, task, commit.authored_at)
 
     db.commit()
     db.refresh(task)

@@ -13,9 +13,11 @@ export const TASK_STATUS_META: Record<string, { label: string; className: string
   done: { label: "Готово", className: "bg-emerald-500/15 text-emerald-600" },
 };
 
+/** Вклад — целое от 0 до 100. Дробей на шкале нет: «65» человек читает,
+ *  «0.65» приходится объяснять. */
 export function formatScore(score: number | null): string {
   if (score === null || score === undefined) return "—";
-  return score.toFixed(2);
+  return String(Math.round(score));
 }
 
 // Роль хранится ключом ("ba"), показывать её надо словами. Незнакомый ключ
@@ -36,3 +38,15 @@ export const ROLE_LABELS: Record<string, string> = {
 export function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
+
+/** Роли, которые тимлид может выставить участнику. Порядок — как в боте. */
+export const ROLE_OPTIONS: { key: string; label: string }[] = [
+  "backend",
+  "frontend",
+  "design",
+  "qa",
+  "pm",
+  "ba",
+  "sa",
+  "devops",
+].map((key) => ({ key, label: ROLE_LABELS[key] }));

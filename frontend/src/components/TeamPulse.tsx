@@ -3,6 +3,7 @@ import { formatScore } from "../lib/status";
 
 interface Props {
   summary: TeamSummary;
+  onExplain: () => void;
 }
 
 const SEGMENTS: { key: keyof TeamSummary; color: string; label: string }[] = [
@@ -12,7 +13,7 @@ const SEGMENTS: { key: keyof TeamSummary; color: string; label: string }[] = [
   { key: "no_data_count", color: "bg-gray-400", label: "нет данных" },
 ];
 
-export default function TeamPulse({ summary }: Props) {
+export default function TeamPulse({ summary, onExplain }: Props) {
   const total =
     summary.green_count + summary.yellow_count + summary.red_count + summary.no_data_count || 1;
 
@@ -26,6 +27,13 @@ export default function TeamPulse({ summary }: Props) {
             <span className="ml-1.5 text-xs font-normal text-[var(--tg-hint-color)]">медиана</span>
           </div>
         </div>
+        <button
+          onClick={onExplain}
+          aria-label="Как считается вклад"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--tg-secondary-bg-color)] text-sm text-[var(--tg-hint-color)] active:scale-90 transition-transform"
+        >
+          ?
+        </button>
       </div>
 
       <div className="mb-3 flex h-2.5 w-full overflow-hidden rounded-full bg-[var(--tg-secondary-bg-color)]">

@@ -158,6 +158,9 @@ class CommitOut(BaseModel):
     deletions: int | None
     author_name: str | None = None
     html_url: str | None = None
+    # Номер задачи, к которой привязан коммит, — суть продукта видна прямо
+    # в списке коммитов, а не только внутри карточки задачи.
+    task_number: int | None = None
 
 
 class TaskHistoryOut(BaseModel):
@@ -165,6 +168,38 @@ class TaskHistoryOut(BaseModel):
     new_status: TaskStatus
     changed_at: datetime
     changed_by_name: str | None = None
+
+
+class ScoreComponentOut(BaseModel):
+    """Одно слагаемое формулы вклада. Заполняются только поля своей компоненты —
+    подписи и формулировки живут на фронте, сюда идут только числа и ключи."""
+
+    key: str
+    # Вес уже после перераспределения: исключённая компонента отдаёт свой вес
+    # остальным, и экран объясняет правило сам, ничего не дублируя.
+    weight: float
+    value: float | None = None
+    points: float
+    excluded: bool = False
+
+    done_on_time: int | None = None
+    eligible: int | None = None
+    assigned: int | None = None
+    raw_value: int | None = None
+    peer_median: float | None = None
+    capped: bool | None = None
+    active_days: int | None = None
+    target_days: int | None = None
+    window_days: int | None = None
+    stuck_days: int | None = None
+    red_days: int | None = None
+
+
+class ScoreBreakdownOut(BaseModel):
+    score: int
+    components: list[ScoreComponentOut]
+    # Ключи пояснений: tasks_excluded | reviews_excluded | code_capped | peer_fallback_team
+    notes: list[str] = []
 
 
 class DiagnosisOut(BaseModel):
@@ -188,6 +223,8 @@ class MemberDetailOut(BaseModel):
     # С чем сравнивали при нормализации: "role" или "team" (+ сколько человек в роли). Нужно, чтобы не выдавать откат на всю команду за нормализацию по роли.
     peer_basis: str | None = None
     role_peer_count: int = 0
+    # Разбор балла на слагаемые — считается тем же кодом, что и сам балл.
+    breakdown: ScoreBreakdownOut | None = None
 
 
 class NotificationLogOut(BaseModel):

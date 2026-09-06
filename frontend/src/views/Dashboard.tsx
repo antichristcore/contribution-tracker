@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import InviteModal from "../components/InviteModal";
 import MemberCard from "../components/MemberCard";
+import CommitHeatmap from "../components/CommitHeatmap";
 import TeamPulse from "../components/TeamPulse";
 import TeamSettingsModal from "../components/TeamSettingsModal";
 import { api } from "../lib/api";
@@ -10,9 +11,10 @@ import type { MemberSummary, TeamSummary } from "../lib/types";
 interface Props {
   onOpenMember: (id: number) => void;
   onOpenBeforeAfter: () => void;
+  onExplainScore: () => void;
 }
 
-export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
+export default function Dashboard({ onOpenMember, onOpenBeforeAfter, onExplainScore }: Props) {
   const [members, setMembers] = useState<MemberSummary[] | null>(null);
   const [summary, setSummary] = useState<TeamSummary | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -86,7 +88,12 @@ export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
         </div>
       </div>
 
-      <TeamPulse summary={summary} />
+      <TeamPulse summary={summary} onExplain={onExplainScore} />
+
+      <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
+        <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">Активность команды</div>
+        <CommitHeatmap />
+      </div>
 
       <div className="mb-5 flex items-center justify-between">
         <button
@@ -100,7 +107,7 @@ export default function Dashboard({ onOpenMember, onOpenBeforeAfter }: Props) {
         <div className="text-right text-[11px] text-[var(--tg-hint-color)]">
           {lastUpdated && <div>Обновлено {lastUpdated.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</div>}
           <button onClick={onOpenBeforeAfter} className="text-[var(--tg-link-color)]">
-            📈 До / После
+            📈 Динамика
           </button>
         </div>
       </div>

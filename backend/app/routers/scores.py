@@ -2,13 +2,16 @@ import statistics
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.app.config import settings
 from backend.app.deps import get_current_member, get_db, require_teamlead
-from backend.app.models import Member, ScoreHistory, StatusColor, SystemRole, Team
-from backend.app.schemas import ScoreHistoryOut, TeamSummaryMemberOut, TeamSummaryOut
+from backend.app.models import Commit, Member, ScoreHistory, StatusColor, SystemRole, Team
+from backend.app.schemas import CommitOut, ScoreHistoryOut, TeamSummaryMemberOut, TeamSummaryOut
+from backend.app.services import scoring
 from backend.app.services.recalc import recalculate_team_scores
+from backend.app.services.task_utils import commits_to_out
 from backend.app.utils.time import utcnow
 
 router = APIRouter(prefix="/api/scores", tags=["scores"])
@@ -90,3 +93,139 @@ async def recalculate(
     if not team:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Team not found")
     return await recalculate_team_scores(db, team, as_of)
+
+
+class CommitActivityDay(BaseModel):
+    date: str
+    commits: int
+    lines: int
+
+
+class CommitActivityOut(BaseModel):
+    days: list[CommitActivityDay]
+    max_commits: int
+    total_commits: int
+    total_lines: int
+
+
+@router.get("/commit-activity", response_model=CommitActivityOut)
+def commit_activity(
+    member_id: int | None = None,
+    days: int = 91,
+    db: Session = Depends(get_db),
+    current: Member = Depends(get_current_member),
+) -> CommitActivityOut:
+    """Коммиты по дням — для календаря активности в стиле GitHub.
+
+    Возвращает сплошной ряд дней без пропусков: клетки без коммитов тоже
+    нужны, иначе календарь не построить.
+    """
+    days = max(7, min(days, 366))
+    until = utcnow()
+    since = until - timedelta(days=days - 1)
+
+    query = db.query(Commit).filter(
+        Commit.team_id == current.team_id,
+        Commit.authored_at >= since.replace(hour=0, minute=0, second=0, microsecond=0),
+        Commit.authored_at <= until,
+    )
+    if member_id is not None:
+        query = query.filter(Commit.member_id == member_id)
+
+    buckets: dict[str, list[int]] = {}
+    for commit in query.all():
+        key = commit.authored_at.date().isoformat()
+        slot = buckets.setdefault(key, [0, 0])
+        slot[0] += 1
+        slot[1] += (commit.additions or 0) + (commit.deletions or 0)
+
+    out: list[CommitActivityDay] = []
+    for offset in range(days):
+        day = (since + timedelta(days=offset)).date().isoformat()
+        commits, lines = buckets.get(day, (0, 0))
+        out.append(CommitActivityDay(date=day, commits=commits, lines=lines))
+
+    return CommitActivityOut(
+        days=out,
+        max_commits=max((d.commits for d in out), default=0),
+        total_commits=sum(d.commits for d in out),
+        total_lines=sum(d.lines for d in out),
+    )
+
+
+@router.get("/commit-activity/day", response_model=list[CommitOut])
+def commit_activity_day(
+    date: str,
+    member_id: int | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current: Member = Depends(get_current_member),
+) -> list[CommitOut]:
+    """Коммиты за один день календаря — то, что открывается тапом по клетке.
+
+    Границы дня те же naive-UTC сутки, по которым /commit-activity раскладывает
+    клетки, поэтому список не может разойтись со счётчиком на клетке.
+    """
+    try:
+        day = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "date must be YYYY-MM-DD")
+
+    query = db.query(Commit).filter(
+        Commit.team_id == current.team_id,
+        Commit.authored_at >= day,
+        Commit.authored_at < day + timedelta(days=1),
+    )
+    if member_id is not None:
+        query = query.filter(Commit.member_id == member_id)
+
+    commits = query.order_by(Commit.authored_at.desc()).limit(max(1, min(limit, 200))).all()
+    return commits_to_out(db, commits, db.get(Team, current.team_id))
+
+
+class ScoreFormulaOut(BaseModel):
+    """Константы формулы для экрана «Как считается вклад».
+
+    Экран рендерится из этих чисел, а не из захардкоженной копии: иначе текст
+    разъедется с кодом и снова придётся объяснять балл на словах.
+    """
+
+    score_max: int
+    weight_tasks: int
+    weight_code: int
+    weight_rhythm: int
+    weight_reviews: int
+    penalty_max: int
+    code_window_days: int
+    rhythm_window_days: int
+    rhythm_target_days: int
+    normalize_cap: float
+    max_lines_per_commit: int
+    stuck_red_days: int
+    yellow_streak_days: int
+    yellow_to_red_extra_days: int
+    yellow_below_median_percent: int
+    yellow_inactive_days: int
+
+
+@router.get("/formula", response_model=ScoreFormulaOut)
+def score_formula() -> ScoreFormulaOut:
+    return ScoreFormulaOut(
+        score_max=scoring.SCORE_MAX,
+        weight_tasks=scoring.W_TASKS,
+        weight_code=scoring.W_CODE,
+        weight_rhythm=scoring.W_RHYTHM,
+        weight_reviews=scoring.W_REVIEWS,
+        penalty_max=scoring.PENALTY_MAX,
+        code_window_days=scoring.CODE_WINDOW_DAYS,
+        rhythm_window_days=scoring.RHYTHM_WINDOW_DAYS,
+        rhythm_target_days=scoring.RHYTHM_TARGET_DAYS,
+        normalize_cap=scoring.NORMALIZE_CAP,
+        max_lines_per_commit=scoring.MAX_LINES_PER_COMMIT,
+        stuck_red_days=scoring.STUCK_RED_DAYS,
+        yellow_streak_days=scoring.YELLOW_STREAK_DAYS,
+        yellow_to_red_extra_days=scoring.YELLOW_TO_RED_EXTRA_DAYS,
+        # 40% ниже медианы и 4 дня без активности — пороги из _member_at_risk_on_date.
+        yellow_below_median_percent=40,
+        yellow_inactive_days=4,
+    )

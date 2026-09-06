@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Contribution Tracker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+      // Outside the real Telegram client (plain browser dev) window.Telegram
+      // is undefined, and @twa-dev/sdk reads window.Telegram.WebApp at
+      // import time — stub it so the app still runs standalone in a browser.
+      if (!window.Telegram || !window.Telegram.WebApp) {
+        window.Telegram = {
+          WebApp: {
+            initData: "",
+            initDataUnsafe: {},
+            themeParams: {},
+            colorScheme: "light",
+            ready() {},
+            expand() {},
+            close() {},
+            onEvent() {},
+            offEvent() {},
+            HapticFeedback: {
+              impactOccurred() {},
+              notificationOccurred() {},
+              selectionChanged() {},
+            },
+            MainButton: {
+              show() {},
+              hide() {},
+              setText() {},
+              onClick() {},
+              offClick() {},
+            },
+            BackButton: { show() {}, hide() {}, onClick() {}, offClick() {} },
+          },
+        };
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

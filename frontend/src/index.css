@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  --tg-bg-color: #ffffff;
+  --tg-text-color: #1c1c1e;
+  --tg-hint-color: #8e8e93;
+  --tg-link-color: #2481cc;
+  --tg-button-color: #2481cc;
+  --tg-button-text-color: #ffffff;
+  --tg-secondary-bg-color: #f2f2f7;
+  --tg-section-bg-color: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --tg-bg-color: #0f0f10;
+  --tg-text-color: #f5f5f7;
+  --tg-hint-color: #8e8e93;
+  --tg-link-color: #6ab7ff;
+  --tg-button-color: #2481cc;
+  --tg-button-text-color: #ffffff;
+  --tg-secondary-bg-color: #1c1c1e;
+  --tg-section-bg-color: #17171a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--tg-bg-color);
+  color: var(--tg-text-color);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 59, 48, 0);
+  }
+}
+
+.pulse-red {
+  animation: pulse-red 1.8s ease-out infinite;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in-up {
+  animation: fade-in-up 0.25s ease-out both;
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sheet-in {
+  animation: sheet-in 0.2s ease-out both;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

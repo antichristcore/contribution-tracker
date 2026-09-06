@@ -4,8 +4,8 @@
 выбор задачи. Здесь — что происходит с самой задачей после привязки.
 
 Оба покрытых здесь правила появились как исправления реальных багов:
-  - «Fix login bug #42» закрывал задачу, потому что ключевое слово искалось
-    в любом месте сообщения;
+  - коммит закрывал задачу по ключевому слову, и «fix #42» в смысле «работаю
+    над этим» мгновенно уводил её в «готово»; теперь закрывает только человек;
   - status_changed_at двигался только при переходе todo -> in_progress,
     поэтому счётчик «N дней без изменений» врал на активных задачах.
 """
@@ -30,31 +30,26 @@ def test_first_commit_starts_a_todo_task(db, team):
     member = make_member(db, team)
     task = make_task(db, team, assignee=member, status=TaskStatus.todo)
 
-    advance_task_status(db, task, NOW, is_closing=False)
+    advance_task_status(db, task, NOW)
 
     assert task.status is TaskStatus.in_progress
     assert task.completed_at is None
 
 
-def test_closing_keyword_completes_the_task(db, team):
+@pytest.mark.parametrize(
+    "message", ["Fix login bug #{n}", "fixes #{n}", "closes #{n}", "готово #{n}"]
+)
+def test_no_commit_ever_completes_a_task(db, team, message):
+    """Регрессия: коммит закрывал задачу по ключевому слову. Теперь любое
+    сообщение — только привязка, «готово» ставит человек."""
     member = make_member(db, team)
     task = make_task(db, team, assignee=member, status=TaskStatus.in_progress)
 
-    advance_task_status(db, task, NOW, is_closing=True)
-
-    assert task.status is TaskStatus.done
-    assert task.completed_at == NOW
-
-
-def test_plain_reference_never_completes_the_task(db, team):
-    """Регрессия: «Fix login bug #42» мгновенно закрывал задачу."""
-    member = make_member(db, team)
-    task = make_task(db, team, assignee=member, status=TaskStatus.in_progress)
-
-    _, is_closing = parse_task_references(f"Fix login bug #{task.id}")[0]
-    advance_task_status(db, task, NOW, is_closing=is_closing)
+    assert parse_task_references(message.format(n=task.id)) == [task.id]
+    advance_task_status(db, task, NOW)
 
     assert task.status is TaskStatus.in_progress
+    assert task.completed_at is None
 
 
 def test_done_task_is_never_reopened(db, team):
@@ -65,7 +60,7 @@ def test_done_task_is_never_reopened(db, team):
     )
     completed_at = task.completed_at
 
-    advance_task_status(db, task, NOW, is_closing=False)
+    advance_task_status(db, task, NOW)
 
     assert task.status is TaskStatus.done
     assert task.completed_at == completed_at
@@ -84,7 +79,7 @@ def test_every_commit_moves_the_staleness_clock(db, team):
     )
     assert (NOW - task.status_changed_at).days == 9
 
-    advance_task_status(db, task, NOW, is_closing=False)
+    advance_task_status(db, task, NOW)
 
     assert task.status_changed_at == NOW
 
@@ -97,7 +92,7 @@ def test_older_commit_does_not_rewind_the_clock(db, team):
         db, team, assignee=member, status=TaskStatus.in_progress, status_changed_days_ago=0
     )
 
-    advance_task_status(db, task, NOW - timedelta(days=5), is_closing=False)
+    advance_task_status(db, task, NOW - timedelta(days=5))
 
     assert task.status_changed_at == NOW
 
@@ -108,7 +103,7 @@ def test_status_change_is_recorded_as_automatic(db, team):
     member = make_member(db, team)
     task = make_task(db, team, assignee=member, status=TaskStatus.todo)
 
-    advance_task_status(db, task, NOW, is_closing=False)
+    advance_task_status(db, task, NOW)
     db.commit()
 
     rows = db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task.id).all()
@@ -126,7 +121,7 @@ def test_timestamp_only_move_writes_no_history(db, team):
         db, team, assignee=member, status=TaskStatus.in_progress, status_changed_days_ago=3
     )
 
-    advance_task_status(db, task, NOW, is_closing=False)
+    advance_task_status(db, task, NOW)
     db.commit()
 
     assert db.query(TaskStatusHistory).filter(TaskStatusHistory.task_id == task.id).count() == 0
@@ -176,17 +171,18 @@ def test_commits_without_references_stay_unlinked(db, team):
 
 
 def test_relink_applies_commits_in_chronological_order(db, team):
-    """Коммиты применяются от старого к новому, поэтому закрывающий коммит,
-    пришедший в той же пачке, оставляет задачу закрытой."""
+    """Синк приходит пачкой и не по порядку. Коммиты применяются от старого к
+    новому, поэтому счётчик застоя встаёт на самый свежий из них."""
     member = make_member(db, team)
     task = make_task(
         db, team, assignee=member, status=TaskStatus.todo,
         created_days_ago=5, status_changed_days_ago=5,
     )
-    make_commit(db, team, member, days_ago=1, message=f"доделал, fixes #{task.id}")
+    make_commit(db, team, member, days_ago=1, message=f"доделал #{task.id}")
     make_commit(db, team, member, days_ago=3, message=f"начал #{task.id}")
 
     assert relink_unlinked_commits(db, team.id) == 2
     db.commit()
 
-    assert task.status is TaskStatus.done
+    assert task.status is TaskStatus.in_progress
+    assert task.status_changed_at == NOW - timedelta(days=1)

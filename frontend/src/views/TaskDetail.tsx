@@ -164,8 +164,8 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
 
       <div className="mb-4 rounded-xl bg-[var(--tg-secondary-bg-color)] p-3 text-xs text-[var(--tg-hint-color)]">
         Упомяни <span className="font-mono text-[var(--tg-text-color)]">#{task.number}</span> в сообщении коммита — он
-        привяжется сюда сам, а задача перейдёт «в работе». Напишешь{" "}
-        <span className="font-mono text-[var(--tg-text-color)]">fixes #{task.number}</span> — закроется.
+        привяжется сюда сам, а задача перейдёт «в работе». Закрыть задачу может только человек —
+        кнопкой «Отметить готовой».
       </div>
 
       <div className="mb-2 flex items-center justify-between">

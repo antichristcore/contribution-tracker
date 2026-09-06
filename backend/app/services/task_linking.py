@@ -1,7 +1,6 @@
-"""Links GitHub commits to tasks by parsing "#<id>" references out of commit
-messages — the same convention GitHub/Jira "smart commits" use. This is what
-drives task status from real commit activity instead of a self-reported
-status button."""
+"""Links GitHub commits to tasks by parsing "#<номер>" references out of commit
+messages. This is what drives task status from real commit activity instead of
+a self-reported status button."""
 
 import re
 from datetime import datetime
@@ -10,29 +9,25 @@ from sqlalchemy.orm import Session
 
 from backend.app.models import Commit, Task, TaskStatus, TaskStatusHistory
 
-# A bare "#42" links a commit to task 42. A closing keyword *immediately
-# before* the reference ("fixes #42") also completes it — matching GitHub's
-# own semantics, so an ordinary "Fix login bug #42" links without silently
-# closing the task.
-_REF_RE = re.compile(
-    r"(?:(?P<kw>close[sd]?|fix(?:e[sd])?|resolve[sd]?|закрывает|готово)\s+)?#(?P<id>\d+)",
-    re.IGNORECASE,
-)
+# Ссылка «#42» только привязывает коммит к задаче и переводит её в «в работе».
+# Ключевых слов вроде «fixes» здесь сознательно нет: люди пишут «fix #42» в
+# смысле «работаю над этим», и задача закрывалась сама на первом же коммите.
+# Закрыть задачу может только человек — кнопкой «Отметить готовой».
+_REF_RE = re.compile(r"#(?P<number>\d+)")
 
 
-def parse_task_references(message: str | None) -> list[tuple[int, bool]]:
-    """[(номер задачи в проекте, закрывает ли), ...] в порядке появления."""
+def parse_task_references(message: str | None) -> list[int]:
+    """Номера задач в порядке появления в сообщении."""
     if not message:
         return []
-    return [(int(m.group("id")), bool(m.group("kw"))) for m in _REF_RE.finditer(message)]
+    return [int(m.group("number")) for m in _REF_RE.finditer(message)]
 
 
 def link_commit_to_task(
     db: Session, team_id: int, message: str | None, authored_at: datetime
-) -> tuple[Task, bool] | None:
-    """First referenced task belonging to this team, plus whether the
-    reference was a closing one."""
-    for number, is_closing in parse_task_references(message):
+) -> Task | None:
+    """First referenced task belonging to this team."""
+    for number in parse_task_references(message):
         # Ищем по номеру внутри проекта: "#3" у разных команд — разные задачи.
         task = (
             db.query(Task).filter(Task.team_id == team_id, Task.number == number).first()
@@ -41,30 +36,26 @@ def link_commit_to_task(
         # этот же guard гасит ложные срабатывания на номерах GitHub-issue из
         # старой истории репозитория.
         if task and authored_at >= task.created_at:
-            return task, is_closing
+            return task
     return None
 
 
-def advance_task_status(db: Session, task: Task, authored_at: datetime, is_closing: bool) -> None:
+def advance_task_status(db: Session, task: Task, authored_at: datetime) -> None:
     """Forward-only. Every linked commit pushes status_changed_at forward, so
     "no changes for N days" means "N days since the last commit on this task";
-    a closing keyword completes the task; the first commit starts it. A done
-    task is never reopened."""
+    the first commit starts the task. Коммит никогда не закрывает задачу и
+    никогда не переоткрывает закрытую."""
     if task.status == TaskStatus.done:
         return
 
     if task.status_changed_at is None or authored_at > task.status_changed_at:
         task.status_changed_at = authored_at
 
-    old_status = task.status
-    if is_closing:
-        task.status = TaskStatus.done
-        task.completed_at = authored_at
-    elif task.status == TaskStatus.todo:
-        task.status = TaskStatus.in_progress
-    else:
-        return  # already in progress — only the activity timestamp moved
+    if task.status != TaskStatus.todo:
+        return  # уже в работе — сдвинулось только время активности
 
+    old_status = task.status
+    task.status = TaskStatus.in_progress
     db.add(
         TaskStatusHistory(
             task_id=task.id,
@@ -77,9 +68,9 @@ def advance_task_status(db: Session, task: Task, authored_at: datetime, is_closi
 
 def relink_unlinked_commits(db: Session, team_id: int) -> int:
     """Attach every still-unlinked commit whose message references a task,
-    oldest first so status transitions land in chronological order. Runs after
-    each sync, which also picks up commits that arrived before their task
-    existed."""
+    oldest first so the staleness clock ends up on the newest commit. Runs
+    after each sync, which also picks up commits that arrived before their
+    task existed."""
     commits = (
         db.query(Commit)
         .filter(Commit.team_id == team_id, Commit.task_id.is_(None))
@@ -89,11 +80,10 @@ def relink_unlinked_commits(db: Session, team_id: int) -> int:
 
     linked = 0
     for commit in commits:
-        result = link_commit_to_task(db, team_id, commit.message, commit.authored_at)
-        if not result:
+        task = link_commit_to_task(db, team_id, commit.message, commit.authored_at)
+        if not task:
             continue
-        task, is_closing = result
         commit.task_id = task.id
-        advance_task_status(db, task, commit.authored_at, is_closing)
+        advance_task_status(db, task, commit.authored_at)
         linked += 1
     return linked

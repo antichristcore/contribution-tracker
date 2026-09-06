@@ -5,6 +5,10 @@ interface Props {
   task: Task;
   mine?: boolean;
   onOpen: () => void;
+  /** «✓» — закрыть задачу прямо с доски. Передаётся только тому, кто имеет
+   *  на это право: коммит задачу больше не закрывает, и единственный путь
+   *  к «готово» не должен быть спрятан в два тапа. */
+  onComplete?: () => void;
 }
 
 function initials(name: string): string {
@@ -13,16 +17,21 @@ function initials(name: string): string {
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-export default function TaskRow({ task, mine, onOpen }: Props) {
+export default function TaskRow({ task, mine, onOpen, onComplete }: Props) {
   const meta = TASK_STATUS_META[task.status];
   const deadline = task.deadline_at ? new Date(task.deadline_at) : null;
   const overdue = deadline && task.status !== "done" && deadline.getTime() < Date.now();
   const isStale = task.status !== "done" && task.stuck_days >= 3;
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onOpen}
-      className={`fade-in-up mb-2 block w-full rounded-xl bg-[var(--tg-section-bg-color)] p-3 text-left active:scale-[0.99] transition-transform ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpen();
+      }}
+      className={`fade-in-up mb-2 block w-full cursor-pointer rounded-xl bg-[var(--tg-section-bg-color)] p-3 text-left active:scale-[0.99] transition-transform ${
         mine ? "ring-1 ring-[var(--tg-button-color)]/40" : ""
       }`}
     >
@@ -45,7 +54,21 @@ export default function TaskRow({ task, mine, onOpen }: Props) {
             )}
           </div>
         </div>
-        <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-medium ${meta.className}`}>{meta.label}</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className={`rounded-full px-2 py-1 text-xs font-medium ${meta.className}`}>{meta.label}</span>
+          {onComplete && task.status !== "done" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onComplete();
+              }}
+              aria-label={`Закрыть задачу #${task.number}`}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-sm text-emerald-600 active:scale-90 transition-transform"
+            >
+              ✓
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--tg-hint-color)]">
@@ -59,6 +82,6 @@ export default function TaskRow({ task, mine, onOpen }: Props) {
         )}
         {isStale && <span className="font-semibold text-amber-500">⚠ {task.stuck_days} дн. без изменений</span>}
       </div>
-    </button>
+    </div>
   );
 }

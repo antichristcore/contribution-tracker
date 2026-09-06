@@ -35,7 +35,7 @@ export default function ScoreBreakdown({ breakdown, scoreMax = 100, onExplain }:
               <span className="flex shrink-0 items-baseline gap-2">
                 {!c.excluded && (
                   <span className="text-[10px] text-[var(--tg-hint-color)]">
-                    вес {Math.round(Math.abs(c.weight))}
+                    макс. {Math.round(Math.abs(c.weight))}
                   </span>
                 )}
                 <span
@@ -74,7 +74,7 @@ export default function ScoreBreakdown({ breakdown, scoreMax = 100, onExplain }:
       )}
 
       <button onClick={onExplain} className="mt-3 text-xs text-[var(--tg-link-color)]">
-        Как это считается →
+        Откуда эти числа →
       </button>
     </div>
   );

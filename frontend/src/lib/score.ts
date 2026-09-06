@@ -1,67 +1,54 @@
 import type { ScoreComponent, ScoreComponentKey } from "./types";
+import { days, num } from "./words";
 
-/** Подписи компонент живут здесь, а не на бэке: оттуда приходят только числа
- *  и ключи, чтобы формулировки можно было менять, не трогая расчёт. */
+/** Подписи строк разбора живут здесь, а не на бэке: оттуда приходят только
+ *  числа и ключи, чтобы формулировки можно было менять, не трогая расчёт. */
 export const COMPONENT_LABELS: Record<ScoreComponentKey, string> = {
   tasks: "Задачи в срок",
   code: "Код",
   rhythm: "Ритм",
   reviews: "Ревью",
-  penalty: "Застой",
+  penalty: "Задачи без движения",
 };
 
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod10 === 1 && mod100 !== 11) return one;
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return few;
-  return many;
-}
-
-export function days(n: number): string {
-  return `${n} ${plural(n, "день", "дня", "дней")}`;
-}
-
-/** Разряды пробелами: «3 420 строк» читается, «3420» — нет. */
-export function num(n: number | null | undefined): string {
-  if (n === null || n === undefined) return "—";
-  return n.toLocaleString("ru-RU");
-}
-
-/** Строка под названием компоненты: откуда взялось её значение. */
+/** Строка под названием: откуда взялось значение.
+ *
+ *  «Медиану» здесь называем серединой команды. Слово точное, но половина
+ *  пользователей его не знает, а объяснение балла не должно требовать
+ *  объяснения слов. */
 export function componentDetail(c: ScoreComponent): string {
   if (c.excluded) return excludedReason(c.key);
 
   switch (c.key) {
     case "tasks":
-      return `${c.done_on_time} из ${c.eligible} закрыто до дедлайна`;
+      return `${c.done_on_time} из ${c.eligible} сдано до дедлайна`;
     case "code":
-      return `${num(c.raw_value)} строк за неделю, медиана по команде ${num(c.peer_median)}`;
+      return `${num(c.raw_value)} строк за неделю, середина команды ${num(c.peer_median)}`;
     case "rhythm":
-      return `${days(c.active_days ?? 0)} с коммитами из ${c.window_days}, для полного балла нужно ${c.target_days}`;
+      return `${days(c.active_days ?? 0)} с коммитами из ${c.window_days}, на полный балл нужно ${c.target_days}`;
     case "reviews":
-      return `${c.raw_value} ревью, медиана ${num(c.peer_median)}`;
+      return `${c.raw_value} ревью, середина команды ${num(c.peer_median)}`;
     case "penalty":
       return c.stuck_days
-        ? `задача без изменений ${days(c.stuck_days)}`
-        : "застрявших задач нет";
+        ? `самая застоявшаяся задача стоит ${days(c.stuck_days)}`
+        : "всё в движении, штрафа нет";
   }
 }
 
 function excludedReason(key: ScoreComponentKey): string {
-  if (key === "reviews") return "в команде нет пул-реквестов — вес ушёл остальным";
-  if (key === "tasks") return "нет задач с наступившим сроком — вес ушёл остальным";
-  return "не учитывается";
+  if (key === "reviews") return "команда работает без пул-реквестов, баллы ушли в другие строки";
+  if (key === "tasks") return "задач с наступившим сроком пока нет, баллы ушли в другие строки";
+  return "не считается";
 }
 
-/** Пояснения-сноски под разбором. Ключи приходят с бэка. */
+/** Сноски под разбором. Ключи приходят с бэка. */
 export const NOTE_TEXTS: Record<string, string> = {
   code_capped:
-    "Вклад в код выше двух медиан дальше не растёт — иначе один сгенерированный файл делал бы автора лучшим в команде.",
+    "Больше двух середин команды за код не начисляем. Иначе один залитый сгенерированный файл сделал бы автора первым в команде.",
   reviews_excluded:
-    "Команда коммитит без пул-реквестов, поэтому ревью не участвует в расчёте, а не обнуляет балл.",
+    "Команда работает без пул-реквестов, поэтому строка «Ревью» не считается. Её баллы разошлись по другим строкам, а не пропали.",
   tasks_excluded:
-    "Задач с наступившим сроком пока нет. Компонента исключена: не назначили задачу — не за что снижать балл.",
+    "Задач с наступившим сроком пока нет, поэтому строка «Задачи в срок» не считается. Её баллы разошлись по другим строкам: за то, что задачу не назначили, балл снижать не за что.",
   peer_fallback_team:
-    "В этой роли не с кем сравнивать, поэтому медиана считается по всей команде.",
+    "В этой роли сравнивать не с кем, поэтому сравниваем со всей командой.",
 };

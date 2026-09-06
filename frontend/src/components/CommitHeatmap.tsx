@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import CommitCard from "./CommitCard";
 import { api } from "../lib/api";
+import { commits as commitsWord, days as daysWord } from "../lib/words";
 import type { CommitInfo } from "../lib/types";
 
 interface ActivityDay {
@@ -114,7 +115,7 @@ export default function CommitHeatmap({ memberId, days = 91 }: Props) {
   return (
     <div>
       <div className="mb-1.5 text-[11px] text-[var(--tg-hint-color)]">
-        {data.total_commits} коммитов за {days} дн. — нажми на день, чтобы посмотреть какие
+        {commitsWord(data.total_commits)} за {daysWord(days)}. Нажми на день, чтобы посмотреть какие.
       </div>
 
       <div className="overflow-x-auto">
@@ -184,7 +185,7 @@ export default function CommitHeatmap({ memberId, days = 91 }: Props) {
             <span className="shrink-0 text-[11px] text-[var(--tg-hint-color)]">
               {selected.commits === 0
                 ? "коммитов не было"
-                : `${selected.commits} комм. · ${selected.lines} строк`}
+                : `${commitsWord(selected.commits)}, ${selected.lines} строк`}
             </span>
           </div>
 

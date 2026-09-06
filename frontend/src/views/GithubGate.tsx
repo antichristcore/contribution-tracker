@@ -41,8 +41,8 @@ export default function GithubGate({ memberId, knownUsername, onDone }: Props) {
     <div className="mx-auto max-w-md p-5">
       <h1 className="mb-1 text-xl font-bold text-[var(--tg-text-color)]">Привяжи GitHub</h1>
       <p className="mb-4 text-sm leading-relaxed text-[var(--tg-hint-color)]">
-        Без этого твои коммиты остаются ничьими: задачи не двигаются, вклад не считается, а в команде
-        ты выглядишь как «нет данных». Достаточно одного раза.
+        Без него приложение не понимает, какие коммиты твои. Задачи не будут двигаться сами, а вклад
+        не посчитается. Ввести нужно один раз.
       </p>
 
       <div className="mb-3 rounded-2xl bg-[var(--tg-section-bg-color)] p-4">
@@ -58,8 +58,8 @@ export default function GithubGate({ memberId, knownUsername, onDone }: Props) {
       </div>
 
       <p className="text-[11px] leading-relaxed text-[var(--tg-hint-color)]">
-        Это тот логин, под которым ты коммитишь: он виден в адресе твоего профиля,
-        github.com/<b>username</b>.
+        Нужен логин, под которым ты коммитишь. Он виден в адресе твоего профиля:
+        github.com/<b>логин</b>.
       </p>
     </div>
   );

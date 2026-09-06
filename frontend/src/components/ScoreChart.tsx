@@ -14,7 +14,7 @@ export default function ScoreChart({ history }: Props) {
   if (data.length < 2) {
     return (
       <div className="text-sm text-[var(--tg-hint-color)] py-6 text-center">
-        Пока недостаточно данных для графика — нужно хотя бы пару дней истории.
+        Для графика нужно хотя бы пару дней истории, пока их меньше.
       </div>
     );
   }

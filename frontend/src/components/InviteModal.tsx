@@ -40,7 +40,7 @@ export default function InviteModal({ onClose }: Props) {
         <div className="mx-auto mb-4 h-1.5 w-10 rounded-full bg-[var(--tg-hint-color)] opacity-40" />
         <h2 className="mb-1 text-lg font-semibold text-[var(--tg-text-color)]">Пригласить в проект</h2>
         <p className="mb-4 text-sm text-[var(--tg-hint-color)]">
-          Отправь участнику ссылку или код — он сможет вступить в один клик через бота.
+          Отправь участнику ссылку или код, и он вступит в проект через бота в один клик.
         </p>
 
         {error && <div className="text-sm text-red-500">{error}</div>}

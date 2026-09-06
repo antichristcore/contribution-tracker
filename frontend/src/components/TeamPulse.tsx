@@ -21,10 +21,14 @@ export default function TeamPulse({ summary, onExplain }: Props) {
     <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-4 fade-in-up">
       <div className="mb-3 flex items-end justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-[var(--tg-hint-color)]">Пульс команды</div>
+          <div className="text-[11px] uppercase tracking-wide text-[var(--tg-hint-color)]">
+            Пульс команды
+          </div>
           <div className="text-2xl font-bold text-[var(--tg-text-color)]">
             {formatScore(summary.median_score)}
-            <span className="ml-1.5 text-xs font-normal text-[var(--tg-hint-color)]">медиана</span>
+            <span className="ml-1.5 text-xs font-normal text-[var(--tg-hint-color)]">
+              середина команды
+            </span>
           </div>
         </div>
         <button
@@ -48,6 +52,10 @@ export default function TeamPulse({ summary, onExplain }: Props) {
             />
           );
         })}
+      </div>
+
+      <div className="mb-1.5 text-[10px] text-[var(--tg-hint-color)]">
+        тимлид в этот подсчёт не входит
       </div>
 
       <div className="flex flex-wrap gap-x-4 gap-y-1">

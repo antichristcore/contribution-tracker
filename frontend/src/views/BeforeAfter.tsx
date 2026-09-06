@@ -77,7 +77,8 @@ export default function BeforeAfter({ onBack }: Props) {
       </button>
       <h1 className="mb-1 text-xl font-bold text-[var(--tg-text-color)]">Динамика команды</h1>
       <p className="mb-4 text-xs text-[var(--tg-hint-color)]">
-        Как менялся вклад каждого за три недели и когда срабатывали пороги. Шкала — 0..100.
+        Как менялся вклад каждого за три недели и когда срабатывали пороги. Вклад считается от 0
+        до 100.
       </p>
 
       <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
@@ -97,7 +98,14 @@ export default function BeforeAfter({ onBack }: Props) {
                   fontSize: 11,
                 }}
               />
-              <Line type="monotone" dataKey="median" stroke="#8e8e93" strokeDasharray="4 4" dot={false} name="медиана" />
+              <Line
+                type="monotone"
+                dataKey="median"
+                stroke="#8e8e93"
+                strokeDasharray="4 4"
+                dot={false}
+                name="середина команды"
+              />
               {members.map((m, i) => (
                 <Line
                   key={m.member_id}
@@ -134,7 +142,7 @@ export default function BeforeAfter({ onBack }: Props) {
           })}
           <span className="flex items-center gap-1">
             <span className="inline-block h-0.5 w-3 shrink-0" style={{ background: "#8e8e93" }} />
-            <span className="text-[var(--tg-hint-color)]">медиана</span>
+            <span className="text-[var(--tg-hint-color)]">середина команды</span>
           </span>
         </div>
       </div>

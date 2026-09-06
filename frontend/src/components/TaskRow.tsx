@@ -1,4 +1,5 @@
 import { TASK_STATUS_META } from "../lib/status";
+import { commits, days } from "../lib/words";
 import type { Task } from "../lib/types";
 
 interface Props {
@@ -73,14 +74,16 @@ export default function TaskRow({ task, mine, onOpen, onComplete }: Props) {
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--tg-hint-color)]">
         <span className={task.linked_commits_count > 0 ? "text-[var(--tg-text-color)]" : ""}>
-          {task.linked_commits_count > 0 ? `🔗 ${task.linked_commits_count} комм.` : "🔗 нет коммитов"}
+          {task.linked_commits_count > 0 ? `🔗 ${commits(task.linked_commits_count)}` : "🔗 нет коммитов"}
         </span>
         {deadline && (
           <span className={overdue ? "font-semibold text-red-500" : ""}>
             {deadline.toLocaleDateString("ru-RU")}
           </span>
         )}
-        {isStale && <span className="font-semibold text-amber-500">⚠ {task.stuck_days} дн. без изменений</span>}
+        {isStale && (
+          <span className="font-semibold text-amber-500">⚠ {days(task.stuck_days)} без изменений</span>
+        )}
       </div>
     </div>
   );

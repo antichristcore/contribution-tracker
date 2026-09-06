@@ -88,7 +88,8 @@ export default function TeamPicker({ teams, knownGithubUsername, onPick, onEnter
       <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-4">
         <div className="mb-1 text-sm font-semibold text-[var(--tg-text-color)]">Твой GitHub</div>
         <div className="mb-2 text-[11px] leading-snug text-[var(--tg-hint-color)]">
-          Нужен и чтобы создать проект, и чтобы вступить: без него твои коммиты остаются ничьими.
+          Нужен и чтобы создать проект, и чтобы вступить в чужой. Без него приложение не поймёт,
+          какие коммиты твои.
         </div>
         <GithubUsernameInput
           value={githubUsername}

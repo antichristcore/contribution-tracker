@@ -5,6 +5,7 @@ import LinkCommitsModal from "../components/LinkCommitsModal";
 import TaskModal, { type TaskPayload } from "../components/TaskModal";
 import { api } from "../lib/api";
 import { TASK_STATUS_META } from "../lib/status";
+import { days } from "../lib/words";
 import { haptic } from "../lib/telegram";
 import type { Member, TaskDetailData } from "../lib/types";
 
@@ -103,7 +104,8 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
   }
 
   async function deleteTask() {
-    if (!confirm(`Удалить задачу #${task.number}? Коммиты останутся, но перестанут быть к ней привязаны.`)) return;
+    if (!confirm(`Удалить задачу #${task.number}? Коммиты останутся, но перестанут относиться к ней.`))
+      return;
     setBusy(true);
     try {
       await api.delete(`/tasks/${taskId}`);
@@ -137,7 +139,7 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
           </span>
         )}
         {task.status !== "done" && task.stuck_days >= 3 && (
-          <span className="font-semibold text-amber-500">⚠ {task.stuck_days} дн. без изменений</span>
+          <span className="font-semibold text-amber-500">⚠ {days(task.stuck_days)} без изменений</span>
         )}
       </div>
 
@@ -163,9 +165,9 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
       )}
 
       <div className="mb-4 rounded-xl bg-[var(--tg-secondary-bg-color)] p-3 text-xs text-[var(--tg-hint-color)]">
-        Упомяни <span className="font-mono text-[var(--tg-text-color)]">#{task.number}</span> в сообщении коммита — он
-        привяжется сюда сам, а задача перейдёт «в работе». Закрыть задачу может только человек —
-        кнопкой «Отметить готовой».
+        Напиши <span className="font-mono text-[var(--tg-text-color)]">#{task.number}</span> в сообщении
+        коммита, и он привяжется к задаче сам, а задача перейдёт в «В работе». Закрыть её коммитом
+        нельзя: это делает человек кнопкой «Отметить готовой».
       </div>
 
       <div className="mb-2 flex items-center justify-between">
@@ -182,8 +184,8 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
 
       {commits.length === 0 && (
         <div className="mb-4 rounded-xl bg-[var(--tg-section-bg-color)] p-4 text-center text-sm text-[var(--tg-hint-color)]">
-          Коммитов пока нет. Либо работа ещё не начиналась, либо в сообщениях не указали #{task.number} — тогда привяжи
-          вручную.
+          Коммитов пока нет. Либо работа ещё не начиналась, либо в сообщениях забыли написать
+          #{task.number}. Во втором случае привяжи их вручную.
         </div>
       )}
 

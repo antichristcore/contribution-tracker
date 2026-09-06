@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from backend.app.config import settings
 from backend.app.utils.build_version import mini_app_url
 from backend.app.db import SessionLocal
-from backend.app.models import Member
+from backend.app.models import Member, Team
 from backend.app.services.github_client import discover_repos_for_token
 from backend.app.services.github_identity import check_github_username
 from backend.app.services.team_membership import (
@@ -52,7 +52,7 @@ def _open_app_keyboard(team_id: int):
     builder = InlineKeyboardBuilder()
     if settings.MINI_APP_URL:
         builder.button(
-            text="Открыть дашборд",
+            text="Открыть приложение",
             web_app=WebAppInfo(url=mini_app_url(settings.MINI_APP_URL, team_id)),
         )
     return builder.as_markup()
@@ -95,14 +95,14 @@ async def _finish_create_team(
         db.close()
 
     repo_note = f" Репозиторий {github_owner}/{github_repo} подключён." if github_owner else ""
-    await message.answer(f"Проект «{team.name}» создан!{repo_note} Ссылка-приглашение есть в дашборде.")
+    await message.answer(f"Проект «{team.name}» создан!{repo_note} Код приглашения лежит в приложении, на вкладке «Команда».")
 
     # Логин спрашиваем и у тимлида: правило одно для всех, а его собственные
     # коммиты иначе останутся ничейными. Но если он уже вводил его в другом
     # проекте, create_team перенёс логин сюда — спрашивать нечего.
     if known_login:
         await message.answer(f"GitHub уже привязан: {known_login}.")
-        await message.answer("Открыть дашборд:", reply_markup=_open_app_keyboard(team.id))
+        await message.answer("Открыть приложение:", reply_markup=_open_app_keyboard(team.id))
         return
     await _ask_for_github_username(message, state, team.id)
 
@@ -112,11 +112,23 @@ async def _ask_for_github_username(message: Message, state: FSMContext, team_id:
     # участника остаются ничьими, и в приложении он висит как «нет данных».
     await state.set_state(Onboarding.awaiting_github_username)
     await state.update_data(team_id=team_id)
-    await message.answer("Укажи свой GitHub username — без него бот не сможет считать твои коммиты.")
+    await message.answer("Укажи свой GitHub username. Без него бот не поймёт, какие коммиты твои.")
 
 
 async def _finish_github_username(message: Message, state: FSMContext, team_id: int | None, raw: str) -> None:
-    check = await check_github_username(raw)
+    # Логин каждого участника вводится именно здесь, поэтому и здесь проверка
+    # должна идти под токеном команды: анонимный лимит GitHub — 60 запросов
+    # в час на весь сервер, и на онбординге команды он выбивается первым.
+    token = None
+    if team_id:
+        db = SessionLocal()
+        try:
+            team = db.get(Team, team_id)
+            token = team.github_token if team else None
+        finally:
+            db.close()
+
+    check = await check_github_username(raw, token)
     if not check.ok:
         await message.answer(f"{check.error}. Попробуй ещё раз.")
         return
@@ -132,7 +144,7 @@ async def _finish_github_username(message: Message, state: FSMContext, team_id: 
     note = (" " + check.warning) if check.warning else ""
     await message.answer(f"Готово, привязал GitHub: {check.login}.{note}")
     if team_id:
-        await message.answer("Открыть дашборд:", reply_markup=_open_app_keyboard(team_id))
+        await message.answer("Открыть приложение:", reply_markup=_open_app_keyboard(team_id))
 
 
 @router.message(CommandStart(deep_link=True))
@@ -236,7 +248,10 @@ async def on_team_name_message(message: Message, state: FSMContext) -> None:
         "Если репозиторий приватный — вместо этого просто пришли токен доступа (ghp_... или github_pat_...), "
         "и я сам найду репозиторий."
     )
-    await message.answer("Или пропусти — добавишь позже в дашборде:", reply_markup=_skip_keyboard("skip_repo"))
+    await message.answer(
+        "Или пропусти, репозиторий можно добавить позже в настройках проекта:",
+        reply_markup=_skip_keyboard("skip_repo"),
+    )
 
 
 @router.message(StateFilter(Onboarding.awaiting_repo))

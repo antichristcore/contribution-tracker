@@ -64,7 +64,7 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
       showToast(
         res.error
           ? `GitHub: ${res.error}`
-          : `Новых коммитов: ${res.new_commits ?? 0} · привязано к задачам: ${res.linked_commits ?? 0}`
+          : `Новых коммитов: ${res.new_commits ?? 0}, из них привязалось к задачам: ${res.linked_commits ?? 0}`
       );
     } catch (e) {
       showToast(e instanceof Error ? e.message : "Не удалось обновить");
@@ -96,7 +96,7 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
     const task = await api.post<{ number: number }>("/tasks", payload);
     haptic("success");
     await load();
-    showToast(`Задача #${task.number} создана — этот номер нужно упоминать в коммитах`);
+    showToast(`Задача #${task.number} создана. Пиши этот номер в сообщениях коммитов`);
   }
 
   if (error) return <div className="p-4 text-sm text-red-500">{error}</div>;

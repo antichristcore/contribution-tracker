@@ -13,7 +13,7 @@ import asyncio
 
 import pytest
 
-from backend.app.services import github_identity
+from backend.app.services import github_client, github_identity
 from backend.app.services.github_identity import check_github_username, normalize_login
 
 

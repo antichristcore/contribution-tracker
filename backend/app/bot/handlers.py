@@ -32,6 +32,9 @@ ROLE_LABELS = {
     "design": "Design",
     "qa": "QA",
     "pm": "PM",
+    "ba": "Бизнес-аналитик",
+    "sa": "Системный аналитик",
+    "devops": "DevOps",
 }
 
 
@@ -56,7 +59,7 @@ def _choose_role_keyboard(team_id: int):
     builder = InlineKeyboardBuilder()
     for role, label in ROLE_LABELS.items():
         builder.button(text=label, callback_data=f"role:{team_id}:{role}")
-    builder.adjust(3)
+    builder.adjust(2)
     return builder.as_markup()
 
 

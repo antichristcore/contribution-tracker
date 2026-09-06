@@ -101,9 +101,13 @@ class GithubMapping(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (UniqueConstraint("team_id", "number", name="uq_task_team_number"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     team_id: Mapped[int] = mapped_column(ForeignKey("teams.id"))
+    # Номер, который человек пишет в коммите. Сквозной id не годится: он общий
+    # на всю базу, и у второго проекта задачи начинались бы с "#46".
+    number: Mapped[int] = mapped_column(Integer, default=0)
     title: Mapped[str] = mapped_column(String(300))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     assignee_member_id: Mapped[int | None] = mapped_column(ForeignKey("members.id"), nullable=True)

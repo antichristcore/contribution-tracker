@@ -21,7 +21,7 @@ _REF_RE = re.compile(
 
 
 def parse_task_references(message: str | None) -> list[tuple[int, bool]]:
-    """[(task_id, is_closing), ...] in the order they appear in the message."""
+    """[(номер задачи в проекте, закрывает ли), ...] в порядке появления."""
     if not message:
         return []
     return [(int(m.group("id")), bool(m.group("kw"))) for m in _REF_RE.finditer(message)]
@@ -32,13 +32,15 @@ def link_commit_to_task(
 ) -> tuple[Task, bool] | None:
     """First referenced task belonging to this team, plus whether the
     reference was a closing one."""
-    for task_id, is_closing in parse_task_references(message):
-        task = db.get(Task, task_id)
-        # Task ids are global, so a reference must be checked against the
-        # team. A commit written before the task existed can't be work for
-        # it either — that guard also kills false positives on GitHub issue
-        # numbers from older history.
-        if task and task.team_id == team_id and authored_at >= task.created_at:
+    for number, is_closing in parse_task_references(message):
+        # Ищем по номеру внутри проекта: "#3" у разных команд — разные задачи.
+        task = (
+            db.query(Task).filter(Task.team_id == team_id, Task.number == number).first()
+        )
+        # Коммит, написанный до создания задачи, не может быть работой по ней —
+        # этот же guard гасит ложные срабатывания на номерах GitHub-issue из
+        # старой истории репозитория.
+        if task and authored_at >= task.created_at:
             return task, is_closing
     return None
 

@@ -37,6 +37,7 @@ from backend.app.models import (  # noqa: E402
 )
 from backend.app.services.invite_codes import generate_unique_invite_code  # noqa: E402
 from backend.app.services.recalc import recalculate_team_scores  # noqa: E402
+from backend.app.services.task_numbers import next_task_number  # noqa: E402
 from backend.app.utils.time import utcnow  # noqa: E402
 
 DEMO_TEAM_NAME = "Демо-команда"
@@ -189,6 +190,7 @@ def add_task(db, team, teamlead, assignee, title, status, deadline_days_from_now
     now = utcnow()
     task = Task(
         team_id=team.id,
+        number=next_task_number(db, team.id),
         title=title,
         assignee_member_id=assignee.id,
         created_by_member_id=teamlead.id,
@@ -234,9 +236,9 @@ def seed_task_commits(db, team: Team, tasks: list[Task], members: dict[str, Memb
             if unreferenced:
                 message = f"Work on {short_title}"
             elif is_last and task.status == TaskStatus.done:
-                message = f"Wrap up {short_title}, closes #{task.id}"
+                message = f"Wrap up {short_title}, closes #{task.number}"
             else:
-                message = rng.choice(TASK_COMMIT_MESSAGES).format(title=short_title, id=task.id)
+                message = rng.choice(TASK_COMMIT_MESSAGES).format(title=short_title, id=task.number)
 
             db.add(
                 Commit(

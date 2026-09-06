@@ -17,3 +17,22 @@ export function formatScore(score: number | null): string {
   if (score === null || score === undefined) return "—";
   return score.toFixed(2);
 }
+
+// Роль хранится ключом ("ba"), показывать её надо словами. Незнакомый ключ
+// возвращаем как есть: роли задавались вручную и до появления этого списка.
+export const ROLE_LABELS: Record<string, string> = {
+  backend: "Backend",
+  frontend: "Frontend",
+  design: "Design",
+  qa: "QA",
+  pm: "PM",
+  ba: "Бизнес-аналитик",
+  sa: "Системный аналитик",
+  devops: "DevOps",
+  teamlead: "Тимлид",
+  member: "Участник",
+};
+
+export function roleLabel(role: string): string {
+  return ROLE_LABELS[role] ?? role;
+}

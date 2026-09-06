@@ -29,7 +29,7 @@ export default function TaskRow({ task, mine, onOpen }: Props) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="truncate font-medium text-[var(--tg-text-color)]">
-            <span className="mr-1.5 font-mono text-xs text-[var(--tg-hint-color)]">#{task.id}</span>
+            <span className="mr-1.5 font-mono text-xs text-[var(--tg-hint-color)]">#{task.number}</span>
             {task.title}
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-xs text-[var(--tg-hint-color)]">

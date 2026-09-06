@@ -7,6 +7,7 @@ from backend.app.models import Commit, Member, SystemRole, Task, TaskStatus, Tas
 from backend.app.schemas import CommitOut, TaskCreate, TaskDetailOut, TaskHistoryOut, TaskOut, TaskUpdate
 from backend.app.services.notifications import notify_task_assigned_by_id
 from backend.app.services.task_linking import advance_task_status
+from backend.app.services.task_numbers import next_task_number
 from backend.app.services.task_utils import commits_to_out, member_names, task_to_out, utcnow
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -83,6 +84,7 @@ def create_task(
 ) -> TaskOut:
     task = Task(
         team_id=teamlead.team_id,
+        number=next_task_number(db, teamlead.team_id),
         title=payload.title,
         description=payload.description,
         assignee_member_id=payload.assignee_member_id,

@@ -26,6 +26,8 @@ export interface MemberSummary extends Member {
 
 export interface Task {
   id: number;
+  /** Номер внутри проекта — то, что пишут в коммите. */
+  number: number;
   title: string;
   description: string | null;
   assignee_member_id: number | null;

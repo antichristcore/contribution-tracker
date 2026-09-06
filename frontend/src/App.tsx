@@ -74,6 +74,9 @@ export default function App() {
   async function selectTeam(teamId: number) {
     setTeamId(teamId);
     const boot = await api.get<Bootstrap>(`/bootstrap?team_id=${teamId}`);
+    // Список проектов тоже обновляем: у только что созданного иначе не будет
+    // имени в верхней плашке.
+    setMyTeams(boot.teams);
     setInitialTasks(boot.tasks);
     setMember(boot.member);
   }
@@ -93,7 +96,7 @@ export default function App() {
       <TeamPicker
         teams={myTeams}
         onPick={(id) => void selectTeam(id)}
-        onJoined={() => window.location.reload()}
+        onEntered={(id) => void selectTeam(id)}
       />
     );
   }

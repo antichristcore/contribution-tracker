@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { api } from "../lib/api";
 import type { MyTeam } from "../lib/types";
+import { roleLabel } from "../lib/status";
 
 interface Props {
   teams: MyTeam[];
   onPick: (teamId: number) => void;
-  onJoined: () => void;
+  /** Проект создан или присоединён — открыть его сразу, без возврата к списку. */
+  onEntered: (teamId: number) => void;
 }
 
-export default function TeamPicker({ teams, onPick, onJoined }: Props) {
+export default function TeamPicker({ teams, onPick, onEntered }: Props) {
   const [name, setName] = useState("");
   const [repo, setRepo] = useState("");
   const [code, setCode] = useState("");
@@ -23,8 +25,12 @@ export default function TeamPicker({ teams, onPick, onJoined }: Props) {
     try {
       const parts = repo.trim().replace(/^\/|\/$/g, "").split("/");
       const [github_owner, github_repo] = parts.length === 2 ? parts : [undefined, undefined];
-      await api.post("/teams", { name: name.trim(), github_owner, github_repo });
-      onJoined();
+      const team = await api.post<{ team_id: number }>("/teams", {
+        name: name.trim(),
+        github_owner,
+        github_repo,
+      });
+      onEntered(team.team_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Не удалось создать проект");
     } finally {
@@ -37,11 +43,11 @@ export default function TeamPicker({ teams, onPick, onJoined }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await api.post("/teams/join", {
+      const team = await api.post<{ team_id: number }>("/teams/join", {
         invite_code: code.trim(),
         github_username: githubUsername.trim().replace(/^@/, "") || undefined,
       });
-      onJoined();
+      onEntered(team.team_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Неверный код приглашения");
     } finally {
@@ -63,7 +69,7 @@ export default function TeamPicker({ teams, onPick, onJoined }: Props) {
             >
               <div className="font-semibold text-[var(--tg-text-color)]">{t.name}</div>
               <div className="text-xs text-[var(--tg-hint-color)]">
-                {t.system_role === "teamlead" ? "Тимлид" : t.role_in_team}
+                {t.system_role === "teamlead" ? "Тимлид" : roleLabel(t.role_in_team)}
               </div>
             </button>
           ))}

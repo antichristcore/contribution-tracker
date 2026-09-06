@@ -1,5 +1,6 @@
 import { STATUS_META, formatScore } from "../lib/status";
 import type { MemberSummary } from "../lib/types";
+import { roleLabel } from "../lib/status";
 
 interface Props {
   member: MemberSummary;
@@ -48,7 +49,7 @@ export default function MemberCard({ member, onClick }: Props) {
 
       <div className="min-w-0 flex-1">
         <div className="truncate font-semibold text-[var(--tg-text-color)]">{member.display_name}</div>
-        <div className="truncate text-xs text-[var(--tg-hint-color)]">{member.role_in_team}</div>
+        <div className="truncate text-xs text-[var(--tg-hint-color)]">{roleLabel(member.role_in_team)}</div>
       </div>
 
       <div className="shrink-0 text-right">

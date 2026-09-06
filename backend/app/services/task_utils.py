@@ -12,6 +12,7 @@ def task_to_out(db: Session, task: Task) -> TaskOut:
     linked_commits_count = db.query(Commit).filter(Commit.task_id == task.id).count()
     return TaskOut(
         id=task.id,
+        number=task.number,
         title=task.title,
         description=task.description,
         assignee_member_id=task.assignee_member_id,

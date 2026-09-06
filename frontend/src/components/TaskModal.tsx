@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Member, Task } from "../lib/types";
+import { roleLabel } from "../lib/status";
 
 export interface TaskPayload {
   title: string;
@@ -85,7 +86,7 @@ export default function TaskModal({ members, task, onClose, onSave }: Props) {
           <option value="">Без исполнителя</option>
           {assignable.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.display_name} ({m.role_in_team})
+              {m.display_name} ({roleLabel(m.role_in_team)})
             </option>
           ))}
         </select>

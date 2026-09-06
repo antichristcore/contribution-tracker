@@ -6,15 +6,10 @@ from backend.app.models import NotificationType, StatusColor, SystemRole, TaskSt
 
 
 def _round_score(value: float | None) -> float | None:
-    # contribution_score is a sum of several float ratios — round for display
-    # everywhere it's serialized, rather than patching every frontend call site.
     return round(value, 2) if value is not None else None
 
 
 def _naive_utc(value: datetime | None) -> datetime | None:
-    # Incoming JSON datetimes may carry a timezone; convert to UTC and strip
-    # tzinfo so they compare cleanly against the naive-UTC datetimes SQLite
-    # round-trips everywhere else in this app.
     if value is not None and value.tzinfo is not None:
         return value.astimezone(timezone.utc).replace(tzinfo=None)
     return value
@@ -78,6 +73,9 @@ class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    # Номер внутри проекта — то, что человек пишет в коммите. id остаётся
+    # техническим идентификатором для маршрутов API.
+    number: int
     title: str
     description: str | None
     assignee_member_id: int | None
@@ -187,9 +185,7 @@ class MemberDetailOut(BaseModel):
     diagnosis: DiagnosisOut | None
     tasks: list[TaskOut]
     commits: list[CommitOut]
-    # С чем сравнивали при нормализации: "role" или "team" (+ сколько человек
-    # в роли). Нужно, чтобы не выдавать откат на всю команду за нормализацию
-    # по роли.
+    # С чем сравнивали при нормализации: "role" или "team" (+ сколько человек в роли). Нужно, чтобы не выдавать откат на всю команду за нормализацию по роли.
     peer_basis: str | None = None
     role_peer_count: int = 0
 

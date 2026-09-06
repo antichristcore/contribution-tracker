@@ -103,7 +103,7 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
   }
 
   async function deleteTask() {
-    if (!confirm(`Удалить задачу #${task.id}? Коммиты останутся, но перестанут быть к ней привязаны.`)) return;
+    if (!confirm(`Удалить задачу #${task.number}? Коммиты останутся, но перестанут быть к ней привязаны.`)) return;
     setBusy(true);
     try {
       await api.delete(`/tasks/${taskId}`);
@@ -121,7 +121,7 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
 
       <div className="mb-1 flex items-start justify-between gap-3">
         <h1 className="text-xl font-bold text-[var(--tg-text-color)]">
-          <span className="mr-2 font-mono text-sm text-[var(--tg-hint-color)]">#{task.id}</span>
+          <span className="mr-2 font-mono text-sm text-[var(--tg-hint-color)]">#{task.number}</span>
           {task.title}
         </h1>
         <span className={`mt-1 shrink-0 rounded-full px-2 py-1 text-xs font-medium ${meta.className}`}>
@@ -131,26 +131,24 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
 
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--tg-hint-color)]">
         <span>{task.assignee_name ?? "без исполнителя"}</span>
-        {isTeamlead ? (
-          <button
-            onClick={() => setShowDeadline((v) => !v)}
-            className={`underline decoration-dotted underline-offset-2 ${
-              overdue ? "font-semibold text-red-500" : "text-[var(--tg-link-color)]"
-            }`}
-          >
-            {deadline ? `дедлайн ${deadline.toLocaleDateString("ru-RU")}` : "срок не задан"}
-          </button>
-        ) : (
-          deadline && (
-            <span className={overdue ? "font-semibold text-red-500" : ""}>
-              дедлайн {deadline.toLocaleDateString("ru-RU")}
-            </span>
-          )
+        {deadline && (
+          <span className={overdue ? "font-semibold text-red-500" : ""}>
+            дедлайн {deadline.toLocaleDateString("ru-RU")}
+          </span>
         )}
         {task.status !== "done" && task.stuck_days >= 3 && (
           <span className="font-semibold text-amber-500">⚠ {task.stuck_days} дн. без изменений</span>
         )}
       </div>
+
+      {isTeamlead && !showDeadline && (
+        <button
+          onClick={() => setShowDeadline(true)}
+          className="mb-3 w-full rounded-xl bg-[var(--tg-secondary-bg-color)] py-2.5 text-sm font-medium text-[var(--tg-text-color)] active:scale-[0.99] transition-transform"
+        >
+          {deadline ? "📅 Перенести срок" : "📅 Задать срок"}
+        </button>
+      )}
 
       {showDeadline && (
         <DeadlineEditor
@@ -165,9 +163,9 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
       )}
 
       <div className="mb-4 rounded-xl bg-[var(--tg-secondary-bg-color)] p-3 text-xs text-[var(--tg-hint-color)]">
-        Упомяни <span className="font-mono text-[var(--tg-text-color)]">#{task.id}</span> в сообщении коммита — он
+        Упомяни <span className="font-mono text-[var(--tg-text-color)]">#{task.number}</span> в сообщении коммита — он
         привяжется сюда сам, а задача перейдёт «в работе». Напишешь{" "}
-        <span className="font-mono text-[var(--tg-text-color)]">fixes #{task.id}</span> — закроется.
+        <span className="font-mono text-[var(--tg-text-color)]">fixes #{task.number}</span> — закроется.
       </div>
 
       <div className="mb-2 flex items-center justify-between">
@@ -184,7 +182,7 @@ export default function TaskDetail({ taskId, currentMember, onBack, onDeleted }:
 
       {commits.length === 0 && (
         <div className="mb-4 rounded-xl bg-[var(--tg-section-bg-color)] p-4 text-center text-sm text-[var(--tg-hint-color)]">
-          Коммитов пока нет. Либо работа ещё не начиналась, либо в сообщениях не указали #{task.id} — тогда привяжи
+          Коммитов пока нет. Либо работа ещё не начиналась, либо в сообщениях не указали #{task.number} — тогда привяжи
           вручную.
         </div>
       )}

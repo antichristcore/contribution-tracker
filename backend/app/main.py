@@ -13,6 +13,7 @@ from backend.app.config import settings
 from backend.app.db import Base, engine
 from backend.app.routers import auth, bootstrap, github_sync, members, presentation, scores, tasks, teams
 from backend.app.services.scheduler import start_scheduler, scheduler
+from backend.app.services.task_numbers import ensure_task_numbers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("main")
@@ -23,6 +24,7 @@ dp.include_router(bot_router)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_task_numbers(engine)
 
     polling_task = None
     if bot:

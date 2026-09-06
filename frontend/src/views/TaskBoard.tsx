@@ -74,10 +74,10 @@ export default function TaskBoard({ currentMember, initialTasks, onOpenTask }: P
   }
 
   async function createTask(payload: TaskPayload) {
-    const task = await api.post<{ id: number }>("/tasks", payload);
+    const task = await api.post<{ number: number }>("/tasks", payload);
     haptic("success");
     await load();
-    showToast(`Задача #${task.id} создана — этот номер нужно упоминать в коммитах`);
+    showToast(`Задача #${task.number} создана — этот номер нужно упоминать в коммитах`);
   }
 
   if (error) return <div className="p-4 text-sm text-red-500">{error}</div>;

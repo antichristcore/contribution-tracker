@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app.db import Base
+from backend.app.services.task_numbers import next_task_number
 from backend.app.models import (
     Commit,
     GithubMapping,
@@ -129,6 +130,7 @@ def make_task(
 ):
     t = Task(
         team_id=team.id,
+        number=next_task_number(db, team.id),
         title=title,
         assignee_member_id=assignee.id if assignee else None,
         status=status,

@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import CommitCard from "../components/CommitCard";
 import TaskRow from "../components/TaskRow";
 import { api } from "../lib/api";
-import { formatScore } from "../lib/status";
+import { formatScore, roleLabel } from "../lib/status";
 import { haptic } from "../lib/telegram";
 import type { Member, MemberDetail as MemberDetailData } from "../lib/types";
 
@@ -78,7 +78,7 @@ export default function MemberDetail({ memberId, currentMember, onBack, onDelete
       {data && (
         <>
           <h1 className="mb-1 text-xl font-bold text-[var(--tg-text-color)]">{data.member.display_name}</h1>
-          <div className="mb-4 text-sm text-[var(--tg-hint-color)]">{data.member.role_in_team}</div>
+          <div className="mb-4 text-sm text-[var(--tg-hint-color)]">{roleLabel(data.member.role_in_team)}</div>
 
           <div className="mb-4 grid grid-cols-2 gap-2">
             <MetricTile label="Score" value={formatScore(data.latest?.contribution_score ?? null)} />
@@ -138,8 +138,8 @@ export default function MemberDetail({ memberId, currentMember, onBack, onDelete
             <div className="mb-1 text-sm font-semibold text-[var(--tg-text-color)]">Score за 3 недели</div>
             <div className="mb-2 text-[11px] text-[var(--tg-hint-color)]">
               {data.peer_basis === "role"
-                ? `Сравнение внутри роли «${data.member.role_in_team}» (${data.role_peer_count} чел.)`
-                : `Сравнение по всей команде — в роли «${data.member.role_in_team}» ${
+                ? `Сравнение внутри роли «${roleLabel(data.member.role_in_team)}» (${data.role_peer_count} чел.)`
+                : `Сравнение по всей команде — в роли «${roleLabel(data.member.role_in_team)}» ${
                     data.role_peer_count === 1 ? "только один человек" : "не с кем сравнивать"
                   }`}
             </div>

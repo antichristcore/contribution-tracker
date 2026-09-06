@@ -21,7 +21,7 @@ def client(db, team, monkeypatch):
     """Клиент, работающий от имени тимлида этой команды."""
     teamlead = make_member(db, team, name="Марина", role="pm", system_role=SystemRole.teamlead)
 
-    async def fake_github(login):
+    async def fake_github(login, token=None):
         return {"login": login, "name": None, "avatar_url": None}
 
     monkeypatch.setattr(github_identity, "fetch_github_user", fake_github)
@@ -75,7 +75,7 @@ def test_github_username_is_verified_before_saving(client, db, team, monkeypatch
     api, _ = client
     member = make_member(db, team, name="Аня", role="backend")
 
-    async def not_found(login):
+    async def not_found(login, token=None):
         return None
 
     monkeypatch.setattr(github_identity, "fetch_github_user", not_found)

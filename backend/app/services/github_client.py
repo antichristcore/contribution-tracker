@@ -8,6 +8,21 @@ logger = logging.getLogger("github_client")
 GITHUB_API_BASE = "https://api.github.com"
 
 
+def plausible_token(token: str | None) -> str | None:
+    """Пустой или заведомо битый токен не отправляем в GitHub.
+
+    Guards against shipped-example placeholders (like ".env.example"'s
+    "ghp_xxx") being sent to GitHub as a real credential — real PATs are much
+    longer than that, so a short one is almost certainly a leftover placeholder.
+    Отправленный мусор хуже отсутствия токена: GitHub отвечает 401 на запрос,
+    который анонимно прошёл бы, и проверка логина молча превращается в
+    «сохранили как есть».
+    """
+    if token and len(token.strip()) >= 20:
+        return token.strip()
+    return None
+
+
 class GitHubClient:
     def __init__(self, owner: str, repo: str, token: str | None = None):
         self.owner = owner
@@ -83,27 +98,38 @@ async def discover_repos_for_token(token: str) -> list[dict]:
     ]
 
 
-async def fetch_github_user(login: str) -> dict | None | str:
+async def fetch_github_user(login: str, token: str | None = None) -> dict | None | str:
     """Профиль пользователя по логину.
 
     dict  — пользователь есть;
     None  — такого логина на GitHub нет (404);
-    str   — проверить не удалось, внутри причина (сеть, лимит, 5xx).
+    str   — проверить не удалось, внутри причина человеческими словами.
 
-    Без токена: GET /users/{login} доступен анонимно, а токен у команды может
-    быть ещё не введён — проверка нужна раньше, чем настройки репозитория.
+    Токен не обязателен: GET /users/{login} открыт анонимно. Но анонимно
+    GitHub даёт всего 60 запросов в час на IP, а через туннель этот IP один
+    на всех — поэтому токен команды, если он есть, поднимает лимит до 5000.
+    Битый токен отбрасываем: с ним запрос вернул бы 401 там, где анонимно
+    он бы прошёл.
     """
+    token = plausible_token(token)
     headers = {"Accept": "application/vnd.github+json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     try:
         async with httpx.AsyncClient(base_url=GITHUB_API_BASE, headers=headers, timeout=8.0) as client:
             response = await client.get(f"/users/{login}")
     except httpx.HTTPError as exc:
         logger.warning("GitHub user lookup failed for %s: %s", login, exc)
-        return "GitHub недоступен"
+        return "GitHub сейчас не отвечает"
 
     if response.status_code == 404:
         return None
+    if response.status_code in (403, 429):
+        # 403 здесь почти всегда исчерпанный лимит, а не запрет доступа:
+        # у публичного профиля запрещать нечего.
+        logger.warning("GitHub rate limit hit while checking %s", login)
+        return "GitHub временно ограничил проверки"
     if response.status_code != 200:
         logger.warning("GitHub user lookup returned %s for %s", response.status_code, login)
-        return f"GitHub ответил {response.status_code}"
+        return "GitHub ответил ошибкой"
     return response.json()

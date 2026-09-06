@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.config import settings
 from backend.app.models import Commit, GithubMapping, Member, PrReview, Team
-from backend.app.services.github_client import GitHubClient
+from backend.app.services.github_client import GitHubClient, plausible_token as _plausible_token
 from backend.app.services.author_matching import rematch_unassigned, resolve_member_id
 from backend.app.services.task_linking import relink_unlinked_commits
 from backend.app.utils.time import utcnow
@@ -14,16 +14,6 @@ logger = logging.getLogger("github_sync")
 
 MAX_STATS_FETCH_PER_RUN = 40
 MAX_PRS_PER_RUN = 30
-
-
-def _plausible_token(token: str | None) -> str | None:
-    # Guards against shipped-example placeholders (like ".env.example"'s
-    # "ghp_xxx") being sent to GitHub as a real credential — real PATs are
-    # much longer than that, so a short one is almost certainly a leftover
-    # placeholder rather than an actual token.
-    if token and len(token) >= 20:
-        return token
-    return None
 
 
 def _parse_github_timestamp(raw: str | None) -> datetime | None:

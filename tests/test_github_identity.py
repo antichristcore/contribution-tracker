@@ -23,7 +23,7 @@ def github(monkeypatch):
     None — нет такого, str — проверить не удалось."""
 
     def _set(result):
-        async def fake(login):
+        async def fake(login, token=None):
             return result
 
         monkeypatch.setattr(github_identity, "fetch_github_user", fake)
@@ -58,7 +58,7 @@ def test_normalize_login(raw, expected):
 def test_impossible_logins_are_rejected_without_asking_github(login, case, github):
     """Заведомо невалидное отсекается до сетевого запроса."""
 
-    async def explode(_login):
+    async def explode(_login, token=None):
         raise AssertionError("не должно доходить до GitHub")
 
     github(None)
@@ -101,3 +101,117 @@ def test_unreachable_github_lets_the_person_through(github):
     assert result.ok is True
     assert result.login == "anna"
     assert result.warning
+
+
+# --- кеш ---------------------------------------------------------------------
+
+
+def test_repeated_check_does_not_ask_github_again(monkeypatch):
+    """Анонимный лимит GitHub — 60 запросов в час на IP, а через туннель он один
+    на всю команду. Форма проверяет логин на каждую паузу в наборе, поэтому
+    один и тот же логин обязан спрашиваться ровно однажды."""
+    calls = []
+
+    async def counting(login, token=None):
+        calls.append(login)
+        return {"login": login, "name": None, "avatar_url": None}
+
+    monkeypatch.setattr(github_identity, "fetch_github_user", counting)
+
+    assert check("anna").ok is True
+    assert check("anna").ok is True
+    assert check("ANNA").ok is True  # регистр не должен плодить запросы
+
+    assert calls == ["anna"]
+
+
+def test_failed_check_is_not_cached(monkeypatch):
+    """Временный сбой кешировать нельзя: иначе он залипнет на четверть часа
+    и человек будет видеть «сохранено без проверки» после того, как всё уже
+    починилось."""
+    outcomes = ["GitHub ограничил число проверок", {"login": "anna", "name": None, "avatar_url": None}]
+
+    async def flaky(login, token=None):
+        return outcomes.pop(0)
+
+    monkeypatch.setattr(github_identity, "fetch_github_user", flaky)
+
+    first = check("anna")
+    assert first.ok is True and first.warning
+
+    second = check("anna")
+    assert second.ok is True and second.warning is None
+
+
+def test_rate_limit_is_reported_in_human_words(github):
+    """403 от GitHub на публичном профиле — это лимит, а не запрет доступа.
+    Человеку показываем причину, а не код ответа."""
+    github("GitHub ограничил число проверок")
+
+    result = check("anna")
+
+    assert result.ok is True
+    assert "ограничил" in result.warning
+
+
+# --- сам запрос к GitHub -----------------------------------------------------
+
+
+class _FakeResponse:
+    def __init__(self, status_code: int):
+        self.status_code = status_code
+
+    def json(self):
+        return {"login": "anna", "name": None, "avatar_url": None}
+
+
+@pytest.fixture
+def github_http(monkeypatch):
+    """Подменяет httpx на уровне запроса: так проверяется разбор ответа GitHub,
+    который заглушка fetch_github_user перепрыгивает. Возвращает список
+    заголовков всех сделанных запросов."""
+    sent_headers = []
+
+    def _set(status_code: int):
+        class _FakeClient:
+            def __init__(self, *_args, headers=None, **_kwargs):
+                self._headers = headers or {}
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                return False
+
+            async def get(self, _url):
+                sent_headers.append(self._headers)
+                return _FakeResponse(status_code)
+
+        monkeypatch.setattr(github_client.httpx, "AsyncClient", _FakeClient)
+        return sent_headers
+
+    return _set
+
+
+def test_rate_limited_response_is_not_mistaken_for_a_missing_user(github_http):
+    """403 нельзя прочитать как «такого логина нет»: настоящий логин иначе
+    отклоняется, и человек не может войти в проект."""
+    github_http(403)
+
+    result = asyncio.run(github_client.fetch_github_user("anna"))
+
+    assert isinstance(result, str)
+    assert "ограничил" in result
+
+
+def test_team_token_is_sent_but_a_placeholder_one_is_not(github_http):
+    """Токен команды поднимает лимит с 60 до 5000. А вот огрызок из
+    .env.example отправлять нельзя: GitHub ответит 401 на запрос, который
+    анонимно прошёл бы, и проверка логина молча станет «сохранили как есть»."""
+    sent = github_http(200)
+
+    asyncio.run(github_client.fetch_github_user("anna", "ghp_" + "x" * 36))
+    asyncio.run(github_client.fetch_github_user("anna", "ghp_xxx"))
+
+    assert sent[0]["Authorization"].startswith("Bearer ghp_")
+    assert "Authorization" not in sent[1]

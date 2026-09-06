@@ -33,6 +33,17 @@ from backend.app.models import (
 NOW = datetime(2026, 3, 15, 12, 0, 0)
 
 
+@pytest.fixture(autouse=True)
+def clear_github_cache():
+    """Проверки логинов кешируются на 15 минут в памяти процесса. Между
+    тестами кеш надо чистить, иначе заглушка одного теста отвечает за другой."""
+    from backend.app.services.github_identity import forget_cached_logins
+
+    forget_cached_logins()
+    yield
+    forget_cached_logins()
+
+
 @pytest.fixture
 def db():
     """Изолированная база в памяти. StaticPool — чтобы все сессии видели

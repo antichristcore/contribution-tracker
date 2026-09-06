@@ -93,6 +93,7 @@ async def api_create_team(
     tg_user: TelegramUser = Depends(get_current_telegram_user),
     db: Session = Depends(get_db),
 ) -> TeamOut:
+    # Токена ещё нет — проект только создаётся, проверка идёт анонимно.
     check = await check_github_username(payload.github_username)
     if not check.ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, check.error)
@@ -118,7 +119,10 @@ async def api_join_team(
     tg_user: TelegramUser = Depends(get_current_telegram_user),
     db: Session = Depends(get_db),
 ) -> TeamOut:
-    check = await check_github_username(payload.github_username)
+    joining = db.query(Team).filter(Team.invite_code == payload.invite_code.strip().upper()).first()
+    check = await check_github_username(
+        payload.github_username, joining.github_token if joining else None
+    )
     if not check.ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, check.error)
     result = join_team_by_code(

@@ -98,7 +98,7 @@ def test_joining_by_code_inherits_the_login(db, team):
 def client(db, team, monkeypatch):
     lead = member_in(db, team, system_role=SystemRole.teamlead)
 
-    async def fake(login):
+    async def fake(login, token=None):
         return {"login": login, "name": None, "avatar_url": None}
 
     monkeypatch.setattr(github_identity, "fetch_github_user", fake)

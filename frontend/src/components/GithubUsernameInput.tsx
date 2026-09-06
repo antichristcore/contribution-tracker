@@ -50,7 +50,7 @@ export default function GithubUsernameInput({
         login,
         name: null,
         avatar_url: null,
-        error: "Так выглядеть логин GitHub не может: только латиница, цифры и дефис",
+        error: "В логине GitHub бывают только латинские буквы, цифры и дефис",
         warning: null,
       };
       setChecking(false);
@@ -80,14 +80,16 @@ export default function GithubUsernameInput({
           name: null,
           avatar_url: null,
           error: null,
-          warning: "Проверить не удалось — сохраним как есть",
+          warning: "Проверить не удалось. Сохраним как есть",
         };
         setCheck(offline);
         onCheck(offline);
       } finally {
         if (token === latest.current) setChecking(false);
       }
-    }, 450);
+      // 700 мс, а не 450: каждая пауза в наборе — запрос к GitHub, а анонимный
+      // лимит там 60 в час на весь туннель.
+    }, 700);
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps

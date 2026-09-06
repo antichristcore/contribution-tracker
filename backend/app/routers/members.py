@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from backend.app.deps import get_current_member, get_db, require_teamlead
+from backend.app.deps import (
+    TelegramUser,
+    get_current_member,
+    get_current_telegram_user,
+    get_db,
+    require_teamlead,
+)
 from backend.app.models import (
     Commit,
     GithubMapping,
@@ -54,11 +60,51 @@ class GithubCheckIn(BaseModel):
     github_username: str
 
 
+def _team_github_token(db: Session, x_team_id: str | None, tg_user: TelegramUser) -> str | None:
+    """Токен команды для проверки логина.
+
+    Анонимно GitHub разрешает 60 запросов в час на IP — на всю команду сразу,
+    потому что через туннель они приходят с одного адреса. С токеном лимит
+    5000, и «сохранено без проверки» перестаёт быть нормой.
+
+    Номер команды приходит заголовком от клиента, поэтому токен отдаём только
+    её участнику: иначе чужой запрос ходил бы в GitHub под токеном команды,
+    к которой он отношения не имеет. Не участник — проверяем анонимно, форма
+    от этого не ломается: она нужна и тем, кто ещё только вступает.
+    """
+    if not x_team_id or not x_team_id.isdigit():
+        return None
+    member = (
+        db.query(Member)
+        .filter(
+            Member.team_id == int(x_team_id),
+            Member.telegram_user_id == tg_user.telegram_user_id,
+            Member.is_active.is_(True),
+        )
+        .first()
+    )
+    if not member:
+        return None
+    team = db.get(Team, int(x_team_id))
+    return team.github_token if team else None
+
+
 @router.post("/github-username/check", response_model=GithubCheckOut)
-async def check_username(payload: GithubCheckIn) -> GithubCheckOut:
+async def check_username(
+    payload: GithubCheckIn,
+    x_team_id: str | None = Header(default=None, alias="X-Team-Id"),
+    tg_user: TelegramUser = Depends(get_current_telegram_user),
+    db: Session = Depends(get_db),
+) -> GithubCheckOut:
     """Существует ли такой логин на GitHub. Форма спрашивает до сохранения,
-    чтобы человек увидел свою аватарку и понял, что привязался правильно."""
-    check = await check_github_username(payload.github_username)
+    чтобы человек увидел свою аватарку и понял, что привязался правильно.
+
+    Вход по Telegram обязателен: без него эндпоинт был бы открытым способом
+    гонять запросы в GitHub от нашего имени.
+    """
+    check = await check_github_username(
+        payload.github_username, _team_github_token(db, x_team_id, tg_user)
+    )
     return GithubCheckOut(**vars(check))
 
 
@@ -118,12 +164,16 @@ def get_member_detail(
     # a "no activity" note on an otherwise green member reads as a false alarm.
     is_flagged = latest is not None and latest.status_color in (StatusColor.yellow, StatusColor.red)
 
+    # Тот же набор участников, что и в пересчёте (recalc): иначе разбор,
+    # посчитанный здесь, сравнивал бы человека с другой командой, чем балл в
+    # списке, и два числа на соседних экранах разошлись бы. Тимлида из группы
+    # сравнения убирает сам compute_team_scores, а его собственный разбор без
+    # этого не считался бы вовсе.
     peers = (
         db.query(Member)
         .filter(
             Member.team_id == member.team_id,
             Member.is_active.is_(True),
-            Member.system_role != SystemRole.teamlead,
         )
         .all()
     )
@@ -221,14 +271,17 @@ async def update_member(
         if _would_leave_team_without_teamlead(db, member, payload.system_role):
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                "В проекте не останется ни одного тимлида — сначала назначь другого",
+                "В проекте не останется ни одного тимлида. Сначала назначь другого.",
             )
         member.system_role = payload.system_role
 
     if payload.github_username is not None or payload.git_author_email is not None or payload.git_author_name is not None:
         github_username = payload.github_username
         if github_username is not None:
-            check = await check_github_username(github_username)
+            team = db.get(Team, member.team_id)
+            check = await check_github_username(
+                github_username, team.github_token if team else None
+            )
             if not check.ok:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, check.error)
             github_username = check.login

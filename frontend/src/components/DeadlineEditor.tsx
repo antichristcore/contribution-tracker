@@ -7,23 +7,34 @@ interface Props {
   onClose: () => void;
 }
 
-/** Перенос срока: быстрые сдвиги на N дней плюс выбор конкретной даты.
- *  Сдвиг считается от текущего дедлайна, а у задачи без срока — от сегодня. */
+/** Готовые сдвиги на частые случаи. Всё остальное — полем «через N дней»
+ *  и точной датой со временем. */
 const QUICK_SHIFTS: { label: string; days: number }[] = [
   { label: "+1 день", days: 1 },
   { label: "+3 дня", days: 3 },
   { label: "+ неделя", days: 7 },
+  { label: "+ 2 недели", days: 14 },
 ];
 
-function toDateInput(iso: string | null): string {
-  if (!iso) return "";
+function pad(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Локальные дата и время, а не UTC: вечером UTC-срез уезжает на день назад. */
+function splitLocal(iso: string | null): { date: string; time: string } {
+  if (!iso) return { date: "", time: "18:00" };
   const d = new Date(iso);
-  // Локальная дата, а не UTC: иначе вечером сдвигается на день назад.
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return {
+    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+  };
 }
 
 export default function DeadlineEditor({ deadlineAt, onChange, onClose }: Props) {
-  const [date, setDate] = useState(toDateInput(deadlineAt));
+  const initial = splitLocal(deadlineAt);
+  const [date, setDate] = useState(initial.date);
+  const [time, setTime] = useState(initial.time);
+  const [customDays, setCustomDays] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,15 +51,28 @@ export default function DeadlineEditor({ deadlineAt, onChange, onClose }: Props)
     }
   }
 
+  /** Сдвиг от текущего срока, а у задачи без срока — от сегодняшнего дня.
+   *  Время сохраняем прежнее, чтобы перенос не сбрасывал его на полночь. */
   function shiftBy(days: number) {
     const base = deadlineAt ? new Date(deadlineAt) : new Date();
+    if (!deadlineAt) base.setHours(18, 0, 0, 0);
     base.setDate(base.getDate() + days);
     void apply(base.toISOString());
   }
 
+  function applyExact() {
+    if (!date) {
+      void apply(null);
+      return;
+    }
+    void apply(new Date(`${date}T${time || "18:00"}:00`).toISOString());
+  }
+
+  const customValid = /^\d{1,3}$/.test(customDays) && Number(customDays) > 0;
+
   return (
     <div className="mb-3 rounded-xl bg-[var(--tg-secondary-bg-color)] p-3">
-      <div className="mb-2 text-xs font-medium text-[var(--tg-text-color)]">Перенести срок</div>
+      <div className="mb-2 text-xs font-medium text-[var(--tg-text-color)]">Срок задачи</div>
 
       <div className="mb-2 flex flex-wrap gap-1.5">
         {QUICK_SHIFTS.map((s) => (
@@ -63,15 +87,40 @@ export default function DeadlineEditor({ deadlineAt, onChange, onClose }: Props)
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-xs text-[var(--tg-hint-color)]">или через</span>
+        <input
+          inputMode="numeric"
+          placeholder="N"
+          value={customDays}
+          onChange={(e) => setCustomDays(e.target.value.replace(/\D/g, ""))}
+          className="w-16 rounded-lg bg-[var(--tg-bg-color)] px-2 py-1.5 text-center text-sm text-[var(--tg-text-color)] outline-none"
+        />
+        <span className="text-xs text-[var(--tg-hint-color)]">дн.</span>
+        <button
+          onClick={() => shiftBy(Number(customDays))}
+          disabled={busy || !customValid}
+          className="rounded-lg bg-[var(--tg-bg-color)] px-3 py-1.5 text-xs text-[var(--tg-text-color)] disabled:opacity-40"
+        >
+          Сдвинуть
+        </button>
+      </div>
+
+      <div className="mb-2 flex gap-2">
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           className="flex-1 rounded-lg bg-[var(--tg-bg-color)] px-3 py-2 text-sm text-[var(--tg-text-color)] outline-none"
         />
+        <input
+          type="time"
+          value={time}
+          onChange={(e) => setTime(e.target.value)}
+          className="w-28 rounded-lg bg-[var(--tg-bg-color)] px-3 py-2 text-sm text-[var(--tg-text-color)] outline-none"
+        />
         <button
-          onClick={() => apply(date ? new Date(`${date}T12:00:00`).toISOString() : null)}
+          onClick={applyExact}
           disabled={busy}
           className="rounded-lg bg-[var(--tg-button-color)] px-4 py-2 text-sm font-medium text-[var(--tg-button-text-color)] active:scale-95 transition-transform disabled:opacity-60"
         >
@@ -79,7 +128,7 @@ export default function DeadlineEditor({ deadlineAt, onChange, onClose }: Props)
         </button>
       </div>
 
-      <div className="mt-2 flex justify-between text-xs">
+      <div className="flex justify-between text-xs">
         {deadlineAt ? (
           <button onClick={() => apply(null)} disabled={busy} className="text-red-500 disabled:opacity-50">
             Убрать срок

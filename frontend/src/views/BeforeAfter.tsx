@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../lib/api";
+import { formatScore } from "../lib/status";
 import type { BeforeAfterData } from "../lib/types";
 
 interface Props {
@@ -74,7 +75,10 @@ export default function BeforeAfter({ onBack }: Props) {
       <button onClick={onBack} className="mb-4 text-sm text-[var(--tg-link-color)]">
         ← Назад
       </button>
-      <h1 className="mb-4 text-xl font-bold text-[var(--tg-text-color)]">До / После</h1>
+      <h1 className="mb-1 text-xl font-bold text-[var(--tg-text-color)]">Динамика команды</h1>
+      <p className="mb-4 text-xs text-[var(--tg-hint-color)]">
+        Как менялся вклад каждого за три недели и когда срабатывали пороги. Шкала — 0..100.
+      </p>
 
       <div className="mb-4 rounded-2xl bg-[var(--tg-section-bg-color)] p-3">
         <div className="h-64 w-full">
@@ -82,7 +86,7 @@ export default function BeforeAfter({ onBack }: Props) {
             <LineChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--tg-hint-color)" opacity={0.15} />
               <XAxis dataKey="date" tick={{ fontSize: 10, fill: "var(--tg-hint-color)" }} />
-              <YAxis tick={{ fontSize: 10, fill: "var(--tg-hint-color)" }} width={32} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "var(--tg-hint-color)" }} width={32} />
               <Tooltip
                 // Highest score first, same ranking the legend shows.
                 itemSorter={(item) => -(Number(item.value) || 0)}
@@ -123,7 +127,7 @@ export default function BeforeAfter({ onBack }: Props) {
                 />
                 <span className="text-[var(--tg-text-color)]">{m.display_name}</span>
                 <span className="text-[var(--tg-hint-color)]">
-                  {score === null ? "нет данных" : score.toFixed(2)}
+                  {score === null ? "нет данных" : formatScore(score)}
                 </span>
               </span>
             );

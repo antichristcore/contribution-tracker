@@ -25,7 +25,9 @@ export default function ScoreChart({ history }: Props) {
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: -20 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--tg-hint-color)" opacity={0.15} />
           <XAxis dataKey="date" tick={{ fontSize: 11, fill: "var(--tg-hint-color)" }} />
-          <YAxis tick={{ fontSize: 11, fill: "var(--tg-hint-color)" }} width={36} />
+          {/* Шкала фиксирована: иначе Recharts подгоняет ось под данные,
+              и колебание 70..75 рисуется как американские горки. */}
+          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "var(--tg-hint-color)" }} width={36} />
           <Tooltip
             contentStyle={{
               background: "var(--tg-section-bg-color)",

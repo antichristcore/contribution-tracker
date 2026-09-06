@@ -42,10 +42,19 @@ def before_after(
         key = r.computed_at.date().isoformat()
         by_day.setdefault(key, []).append(r)
 
+    # Медиана — по тем же людям, чьи линии нарисованы на графике. Балл тимлида
+    # тоже пишется в историю, но он не участник наблюдения: его линии здесь нет,
+    # и в пульсе команды и в порогах его тоже нет — пунктир обязан считаться по
+    # той же группе, иначе одна и та же «середина команды» на трёх экранах разная.
+    tracked_ids = {m.id for m in members}
     days_sorted = sorted(by_day.keys())
     team_median_by_day = []
     for d in days_sorted:
-        scores = [r.contribution_score for r in by_day[d] if r.contribution_score is not None]
+        scores = [
+            r.contribution_score
+            for r in by_day[d]
+            if r.member_id in tracked_ids and r.contribution_score is not None
+        ]
         median = statistics.median(scores) if scores else None
         team_median_by_day.append({"date": d, "median": _round_score(median)})
 

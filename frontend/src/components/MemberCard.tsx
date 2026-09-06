@@ -49,7 +49,16 @@ export default function MemberCard({ member, onClick }: Props) {
 
       <div className="min-w-0 flex-1">
         <div className="truncate font-semibold text-[var(--tg-text-color)]">{member.display_name}</div>
-        <div className="truncate text-xs text-[var(--tg-hint-color)]">{roleLabel(member.role_in_team)}</div>
+        <div className="flex items-center gap-1.5">
+          {member.system_role === "teamlead" && (
+            <span className="shrink-0 rounded-full bg-[var(--tg-button-color)]/15 px-1.5 py-0.5 text-[10px] font-medium text-[var(--tg-link-color)]">
+              тимлид
+            </span>
+          )}
+          <span className="truncate text-xs text-[var(--tg-hint-color)]">
+            {roleLabel(member.role_in_team)}
+          </span>
+        </div>
       </div>
 
       <div className="shrink-0 text-right">

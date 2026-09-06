@@ -30,6 +30,7 @@ from backend.app.models import (
     PrReview,
     ScoreHistory,
     StatusColor,
+    SystemRole,
     Task,
     TaskStatus,
     TaskStatusHistory,
@@ -351,6 +352,14 @@ def compute_team_scores(db: Session, members: list[Member], as_of: datetime) -> 
     has_data_by_id = {m.id: raw_by_member[m.id]["has_data"] for m in members}
     reviews_available = team_has_reviews(db, members[0].team_id) if members else False
 
+    # Балл считаем всем, включая тимлида — иначе его карточка в списке пустая.
+    # Но точкой отсчёта он быть не может: тимлид часто не пишет код вовсе, и его
+    # ноль утянул бы медиану вниз, а вместе с ней и порог «на 40% ниже медианы».
+    # Пороги уже берут медиану без тимлида (_team_median_score_for_date), и
+    # нормализация обязана сравнивать с той же группой — иначе два числа на
+    # одном экране считаются по разным командам.
+    comparable = [m for m in members if m.system_role != SystemRole.teamlead]
+
     def peer_group(metric: str, role: str) -> tuple[list[float], str]:
         """Значения для сравнения + на чём сравниваем: "role" или "team".
 
@@ -362,12 +371,12 @@ def compute_team_scores(db: Session, members: list[Member], as_of: datetime) -> 
         """
         same_role = [
             raw_by_member[m.id][metric]
-            for m in members
+            for m in comparable
             if m.role_in_team == role and raw_by_member[m.id]["has_data"]
         ]
         if len(same_role) >= MIN_PEER_GROUP:
             return same_role, "role"
-        return [raw_by_member[m.id][metric] for m in members if raw_by_member[m.id]["has_data"]], "team"
+        return [raw_by_member[m.id][metric] for m in comparable if raw_by_member[m.id]["has_data"]], "team"
 
     results = []
     for m in members:
@@ -384,7 +393,7 @@ def compute_team_scores(db: Session, members: list[Member], as_of: datetime) -> 
                 "score": breakdown["score"] if breakdown else None,
                 "breakdown": breakdown,
                 "peer_basis": basis,
-                "role_peer_count": role_peer_count(members, m.role_in_team, has_data_by_id),
+                "role_peer_count": role_peer_count(comparable, m.role_in_team, has_data_by_id),
             }
         )
     return results
@@ -405,22 +414,30 @@ def diagnose(raw: dict[str, Any]) -> DiagnosisOut | None:
     if has_activity and is_stalled:
         return DiagnosisOut(
             label="stuck",
-            explanation="Есть активность (коммиты/ревью), но задача не завершается — возможно, участник застрял.",
+            explanation="Коммиты и ревью есть, но задача не завершается. Похоже, человек застрял и ему нужна помощь.",
         )
     if no_activity_at_all and raw["tasks_assigned"] > raw["tasks_completed_on_time"]:
         return DiagnosisOut(
             label="disengaged",
-            explanation="Активности не видно совсем — стоит поговорить лично, а не слать автоматический пуш.",
+            explanation="Активности не видно совсем. Здесь лучше поговорить лично, чем слать уведомление.",
         )
     return None
 
 
 def _team_median_score_for_date(db: Session, team_id: int, target_date) -> float | None:
+    """Медиана команды без тимлида.
+
+    Пороги сравнивают человека с теми, за кем ведётся наблюдение. Тимлид часто
+    не пишет код вовсе, и его ноль утянул бы медиану вниз — тогда реально
+    провисающий участник перестал бы её пробивать и остался зелёным.
+    """
     rows = (
         db.query(ScoreHistory)
+        .join(Member, Member.id == ScoreHistory.member_id)
         .filter(
             ScoreHistory.team_id == team_id,
             ScoreHistory.has_data.is_(True),
+            Member.system_role != SystemRole.teamlead,
             func.date(ScoreHistory.computed_at) == target_date,
         )
         .all()

@@ -55,7 +55,7 @@ export default function MemberRoleEditor({ member, isSelf, onSaved }: Props) {
         ))}
       </select>
       <div className="mb-3 text-[11px] leading-snug text-[var(--tg-hint-color)]">
-        По роли подбирается, с кем сравнивать объём кода: дизайнера не меряют бэкендером.
+        По роли подбираются те, с кем сравнивать объём кода: дизайнера не меряют бэкендером.
       </div>
 
       <div className="mb-1 flex rounded-xl bg-[var(--tg-secondary-bg-color)] p-1">
@@ -76,9 +76,9 @@ export default function MemberRoleEditor({ member, isSelf, onSaved }: Props) {
       </div>
       <div className="text-[11px] leading-snug text-[var(--tg-hint-color)]">
         {isTeamlead
-          ? "Тимлид не участвует в подсчёте вклада — продукт следит за командой, а не за ним."
-          : "Тимлид видит вклад всех, может приглашать людей и менять настройки проекта."}
-        {isSelf && isTeamlead && " Разжаловать себя можно, только назначив другого тимлида."}
+          ? "Тимлид видит вклад всех, приглашает людей и меняет настройки проекта. Балл ему тоже считается, но в пульс команды и в график он не входит."
+          : "Участник видит доску и свой собственный прогресс, но не баллы остальных."}
+        {isSelf && isTeamlead && " Снять с себя тимлида можно, только назначив другого."}
       </div>
 
       {error && <div className="mt-2 text-xs text-red-500">{error}</div>}

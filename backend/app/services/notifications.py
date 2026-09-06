@@ -67,6 +67,12 @@ async def process_member_threshold(
 ) -> None:
     as_of = as_of or utcnow()
 
+    # Балл тимлиду считается, но пороги про него не пишут никому: жёлтое
+    # напоминание «по твоим задачам тихо» он отправил бы сам себе, а красное
+    # уведомление уходит всем тимлидам команды — то есть снова ему же, про него.
+    if member.system_role == SystemRole.teamlead:
+        return
+
     if status_color == StatusColor.yellow:
         if _already_sent_on(db, member.id, NotificationType.yellow_threshold, as_of):
             return

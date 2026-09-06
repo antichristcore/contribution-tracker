@@ -6,10 +6,13 @@ from aiogram.types import CallbackQuery, Message, User, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from backend.app.config import settings
+from backend.app.utils.build_version import mini_app_url
 from backend.app.db import SessionLocal
 from backend.app.models import Member
 from backend.app.services.github_client import discover_repos_for_token
+from backend.app.services.github_identity import check_github_username
 from backend.app.services.team_membership import (
+    team_github_login,
     TeamNameTakenError,
     create_team,
     join_team_by_code,
@@ -50,7 +53,7 @@ def _open_app_keyboard(team_id: int):
     if settings.MINI_APP_URL:
         builder.button(
             text="Открыть дашборд",
-            web_app=WebAppInfo(url=f"{settings.MINI_APP_URL}?team={team_id}"),
+            web_app=WebAppInfo(url=mini_app_url(settings.MINI_APP_URL, team_id)),
         )
     return builder.as_markup()
 
@@ -84,6 +87,7 @@ async def _finish_create_team(
         team, _member = create_team(
             db, name, user.id, user.username, user.first_name, github_owner, github_repo, github_token
         )
+        known_login = team_github_login(db, team.id, user.id)
     except TeamNameTakenError:
         await message.answer(f"Пока ты вводил(а) данные, название «{name}» кто-то уже занял. Отправь /start и попробуй снова с другим названием.")
         return
@@ -92,29 +96,41 @@ async def _finish_create_team(
 
     repo_note = f" Репозиторий {github_owner}/{github_repo} подключён." if github_owner else ""
     await message.answer(f"Проект «{team.name}» создан!{repo_note} Ссылка-приглашение есть в дашборде.")
-    await message.answer("Открыть дашборд:", reply_markup=_open_app_keyboard(team.id))
+
+    # Логин спрашиваем и у тимлида: правило одно для всех, а его собственные
+    # коммиты иначе останутся ничейными. Но если он уже вводил его в другом
+    # проекте, create_team перенёс логин сюда — спрашивать нечего.
+    if known_login:
+        await message.answer(f"GitHub уже привязан: {known_login}.")
+        await message.answer("Открыть дашборд:", reply_markup=_open_app_keyboard(team.id))
+        return
+    await _ask_for_github_username(message, state, team.id)
 
 
 async def _ask_for_github_username(message: Message, state: FSMContext, team_id: int) -> None:
+    # Кнопки «Пропустить» здесь нет намеренно: без привязки к GitHub коммиты
+    # участника остаются ничьими, и в приложении он висит как «нет данных».
     await state.set_state(Onboarding.awaiting_github_username)
     await state.update_data(team_id=team_id)
-    await message.answer(
-        "Укажи свой GitHub username, чтобы бот мог считать твои коммиты.",
-        reply_markup=_skip_keyboard("skip_github"),
-    )
+    await message.answer("Укажи свой GitHub username — без него бот не сможет считать твои коммиты.")
 
 
-async def _finish_github_username(message: Message, team_id: int | None, github_username: str | None) -> None:
-    if team_id and github_username:
+async def _finish_github_username(message: Message, state: FSMContext, team_id: int | None, raw: str) -> None:
+    check = await check_github_username(raw)
+    if not check.ok:
+        await message.answer(f"{check.error}. Попробуй ещё раз.")
+        return
+
+    if team_id:
         db = SessionLocal()
         try:
-            set_github_username(db, team_id, message.from_user.id, github_username)
+            set_github_username(db, team_id, message.from_user.id, check.login)
         finally:
             db.close()
-        await message.answer(f"Готово, привязал GitHub: {github_username}.")
-    else:
-        await message.answer("Ок, пропускаем — тимлид сможет добавить это позже.")
 
+    await state.clear()
+    note = (" " + check.warning) if check.warning else ""
+    await message.answer(f"Готово, привязал GitHub: {check.login}.{note}")
     if team_id:
         await message.answer("Открыть дашборд:", reply_markup=_open_app_keyboard(team_id))
 
@@ -167,7 +183,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
         for _member, team in memberships:
             builder.button(
                 text=f"Открыть «{team.name}»",
-                web_app=WebAppInfo(url=f"{settings.MINI_APP_URL}?team={team.id}"),
+                web_app=WebAppInfo(url=mini_app_url(settings.MINI_APP_URL, team.id)),
             )
     builder.button(
         text="Создать ещё один проект" if memberships else "Я тимлид, создать проект",
@@ -336,17 +352,5 @@ async def cb_choose_role(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(StateFilter(Onboarding.awaiting_github_username))
 async def on_github_username_message(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    team_id = data.get("team_id")
-    github_username = message.text.strip().lstrip("@")
-    await state.clear()
-    await _finish_github_username(message, team_id, github_username)
-
-
-@router.callback_query(F.data == "skip_github", StateFilter(Onboarding.awaiting_github_username))
-async def cb_skip_github(callback: CallbackQuery, state: FSMContext) -> None:
-    data = await state.get_data()
-    team_id = data.get("team_id")
-    await state.clear()
-    await callback.message.edit_text("Ок, пропускаем GitHub.")
-    await _finish_github_username(callback.message, team_id, None)
-    await callback.answer()
+    # Состояние снимает только успешная проверка — иначе переспрашиваем.
+    await _finish_github_username(message, state, data.get("team_id"), message.text or "")

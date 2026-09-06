@@ -81,3 +81,29 @@ async def discover_repos_for_token(token: str) -> list[dict]:
         {"owner": r["owner"]["login"], "repo": r["name"], "private": r["private"], "full_name": r["full_name"]}
         for r in repos
     ]
+
+
+async def fetch_github_user(login: str) -> dict | None | str:
+    """Профиль пользователя по логину.
+
+    dict  — пользователь есть;
+    None  — такого логина на GitHub нет (404);
+    str   — проверить не удалось, внутри причина (сеть, лимит, 5xx).
+
+    Без токена: GET /users/{login} доступен анонимно, а токен у команды может
+    быть ещё не введён — проверка нужна раньше, чем настройки репозитория.
+    """
+    headers = {"Accept": "application/vnd.github+json"}
+    try:
+        async with httpx.AsyncClient(base_url=GITHUB_API_BASE, headers=headers, timeout=8.0) as client:
+            response = await client.get(f"/users/{login}")
+    except httpx.HTTPError as exc:
+        logger.warning("GitHub user lookup failed for %s: %s", login, exc)
+        return "GitHub недоступен"
+
+    if response.status_code == 404:
+        return None
+    if response.status_code != 200:
+        logger.warning("GitHub user lookup returned %s for %s", response.status_code, login)
+        return f"GitHub ответил {response.status_code}"
+    return response.json()

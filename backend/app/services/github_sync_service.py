@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend.app.config import settings
 from backend.app.models import Commit, GithubMapping, Member, PrReview, Team
 from backend.app.services.github_client import GitHubClient
+from backend.app.services.author_matching import rematch_unassigned, resolve_member_id
 from backend.app.services.task_linking import relink_unlinked_commits
 from backend.app.utils.time import utcnow
 
@@ -36,21 +37,8 @@ def _parse_github_timestamp(raw: str | None) -> datetime | None:
 def _resolve_member_id(
     db: Session, team_id: int, login: str | None, email: str | None, name: str | None
 ) -> int | None:
-    query = db.query(GithubMapping).join(Member).filter(Member.team_id == team_id)
+    return resolve_member_id(db, team_id, login, email, name)
 
-    if login:
-        mapping = query.filter(GithubMapping.github_username == login).first()
-        if mapping:
-            return mapping.member_id
-    if email:
-        mapping = query.filter(GithubMapping.git_author_email == email).first()
-        if mapping:
-            return mapping.member_id
-    if name:
-        mapping = query.filter(GithubMapping.git_author_name == name).first()
-        if mapping:
-            return mapping.member_id
-    return None
 
 
 async def sync_team(db: Session, team: Team) -> dict:
@@ -191,6 +179,7 @@ async def _sync_commits_and_reviews(db: Session, team: Team, client: GitHubClien
     return {
         "new_commits": new_commits,
         "linked_commits": linked_commits,
+        "rematched_authors": rematched,
         "stats_fetched": stats_fetched,
         "new_reviews": new_reviews,
         "unresolved_authors": sorted(unresolved_authors),

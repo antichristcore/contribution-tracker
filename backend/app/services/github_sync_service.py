@@ -102,6 +102,11 @@ async def _sync_commits_and_reviews(db: Session, team: Team, client: GitHubClien
 
     db.flush()
 
+    # Автор коммита мог быть неизвестен в момент вставки: человек привязал
+    # GitHub уже после того, как его коммиты синканулись. Проходим по ничейным
+    # ещё раз, иначе работа не засчитается до правки профиля вручную.
+    rematched = rematch_unassigned(db, team.id)
+
     # Attach commits to tasks in one pass, oldest first: this covers both the
     # commits just fetched and any that arrived before their task existed.
     linked_commits = relink_unlinked_commits(db, team.id)

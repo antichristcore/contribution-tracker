@@ -31,4 +31,4 @@ ENV APP_PORT=8000
 EXPOSE $APP_PORT
 
 # Entry
-CMD ["sh", "-c", "python -m uvicorn backend.app.main:app --port \"$APP_PORT\" --host 0.0.0.0"]
+CMD ["sh", "-c", "python -m uvicorn backend.app.main:app --port \"$APP_PORT\" --host 0.0.0.0 2>> data/error.log"]

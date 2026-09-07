@@ -12,4 +12,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Docker build
-      run: docker build --tag github_contrib_tracker:$(date +%s) .
+      run: docker build -t github_contrib_tracker:$(git rev-parse --short HEAD) . && docker save github_contrib_tracker:$(git rev-parse --short HEAD)

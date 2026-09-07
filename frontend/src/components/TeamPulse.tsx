@@ -54,10 +54,6 @@ export default function TeamPulse({ summary, onExplain }: Props) {
         })}
       </div>
 
-      <div className="mb-1.5 text-[10px] text-[var(--tg-hint-color)]">
-        тимлид в этот подсчёт не входит
-      </div>
-
       <div className="flex flex-wrap gap-x-4 gap-y-1">
         {SEGMENTS.map((s) => (
           <div key={s.key} className="flex items-center gap-1.5 text-xs text-[var(--tg-hint-color)]">

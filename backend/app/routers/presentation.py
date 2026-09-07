@@ -22,11 +22,7 @@ def before_after(
     since = utcnow() - timedelta(days=days)
     members = (
         db.query(Member)
-        .filter(
-            Member.team_id == teamlead.team_id,
-            Member.is_active.is_(True),
-            Member.system_role != SystemRole.teamlead,
-        )
+        .filter(Member.team_id == teamlead.team_id, Member.is_active.is_(True))
         .all()
     )
 
@@ -42,10 +38,8 @@ def before_after(
         key = r.computed_at.date().isoformat()
         by_day.setdefault(key, []).append(r)
 
-    # Медиана — по тем же людям, чьи линии нарисованы на графике. Балл тимлида
-    # тоже пишется в историю, но он не участник наблюдения: его линии здесь нет,
-    # и в пульсе команды и в порогах его тоже нет — пунктир обязан считаться по
-    # той же группе, иначе одна и та же «середина команды» на трёх экранах разная.
+    # Медиана считается по тем же людям, чьи линии нарисованы рядом. Иначе
+    # одна и та же «середина команды» на разных экранах получается разной.
     tracked_ids = {m.id for m in members}
     days_sorted = sorted(by_day.keys())
     team_median_by_day = []

@@ -42,13 +42,12 @@ def score_history(
 def team_summary(
     db: Session = Depends(get_db), teamlead: Member = Depends(require_teamlead)
 ) -> TeamSummaryOut:
+    # Тимлид считается наравне со всеми: он тоже коммитит, и его карточка
+    # стоит в том же списке под пульсом. Полоска обязана сходиться с тем, что
+    # человек видит под ней.
     members = (
         db.query(Member)
-        .filter(
-            Member.team_id == teamlead.team_id,
-            Member.is_active.is_(True),
-            Member.system_role != SystemRole.teamlead,
-        )
+        .filter(Member.team_id == teamlead.team_id, Member.is_active.is_(True))
         .all()
     )
     rows = []

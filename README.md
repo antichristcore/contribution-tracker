@@ -61,7 +61,7 @@ git commit -m "поправил валидацию #42"        # коммит п
 
 ## Стек
 
-FastAPI + SQLAlchemy + SQLite · aiogram 3 (бот в том же процессе) · React 19 + Vite + Tailwind · APScheduler.
+FastAPI + SQLAlchemy + SQLite · aiogram 3 · React 19 + Vite + Tailwind · APScheduler.
 
 ## Запуск
 
@@ -73,19 +73,6 @@ cd frontend && npm install && npm run build && cd ..
 ```
 
 Mini App требует публичный HTTPS-адрес. Для разработки подойдёт туннель, его адрес впиши в `MINI_APP_URL`.
-
-**Демо без интернета**:
-
-```powershell
-.\.venv\Scripts\python scripts\seed_synthetic_demo.py   # 8 участников, 21 день истории
-.\scripts\demo_local.ps1                                # http://localhost:8001/?as=1
-```
-
-Разовый переход на шкалу 0..100 (стирает историю старой шкалы и считает заново):
-
-```powershell
-.\.venv\Scripts\python scripts\migrate_score_scale.py
-```
 
 ## Тесты
 

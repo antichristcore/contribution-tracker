@@ -40,7 +40,7 @@ export default function MemberRoleEditor({ member, isSelf, onSaved }: Props) {
       <div className="mb-2 text-sm font-semibold text-[var(--tg-text-color)]">Роль в команде</div>
 
       <select
-        className="mb-2 w-full rounded-xl bg-[var(--tg-secondary-bg-color)] px-3 py-2.5 text-sm text-[var(--tg-text-color)] outline-none"
+        className="mb-3 w-full rounded-xl bg-[var(--tg-secondary-bg-color)] px-3 py-2.5 text-sm text-[var(--tg-text-color)] outline-none"
         value={member.role_in_team}
         disabled={saving}
         onChange={(e) => void save({ role_in_team: e.target.value })}
@@ -54,9 +54,6 @@ export default function MemberRoleEditor({ member, isSelf, onSaved }: Props) {
           </option>
         ))}
       </select>
-      <div className="mb-3 text-[11px] leading-snug text-[var(--tg-hint-color)]">
-        По роли подбираются те, с кем сравнивать объём кода: дизайнера не меряют бэкендером.
-      </div>
 
       <div className="mb-1 flex rounded-xl bg-[var(--tg-secondary-bg-color)] p-1">
         {(["member", "teamlead"] as SystemRole[]).map((role) => (

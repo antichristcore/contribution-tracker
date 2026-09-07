@@ -11,10 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - uses: actions/download-artifact@v4
     - name: Docker build
       run: docker build -t github_contrib_tracker:$(git rev-parse --short HEAD) .
-      
-    - uses: actions/checkout@v4
-    - uses: actions/download-artifact@v4
-    - name: Image save
-      run: docker save github_contrib_tracker:$(git rev-parse --short HEAD) > gct.tar
